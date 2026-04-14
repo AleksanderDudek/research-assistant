@@ -131,10 +131,11 @@ jobs:
           TAVILY_API_KEY: "test-key-ci"
         run: uv run pytest tests/integration/ -v --timeout=60
 
-  # ── Docker build ──────────────────────────────────────────────────────────
+  # ── Docker build (PRs / non-main branches — no push) ─────────────────────
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
@@ -158,3 +159,58 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ── Build, push to GHCR, and deploy (main branch only) ───────────────────
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [lint, typecheck, unit-tests, failure-mode-tests, integration-tests]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent
+          push: true
+          tags: ghcr.io/${{ github.repository }}/agent:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push MCP server image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.mcp
+          push: true
+          tags: ghcr.io/${{ github.repository }}/mcp-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_VM_HOST }}
+          username: ${{ secrets.GCP_VM_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            cd ~/agentic-research-assistant
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f

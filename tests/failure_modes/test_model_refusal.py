@@ -38,11 +38,20 @@ async def test_reflector_handles_refusal_gracefully() -> None:
     plan = Plan(
         question="Sensitive question",
         steps=[
-            PlanStep(step_id="step_1", action="search", tool="web_search", arguments={"query": "x"}, depends_on=[])
+            PlanStep(
+                step_id="step_1",
+                action="search",
+                tool="web_search",
+                arguments={"query": "x"},
+                depends_on=[],
+            )
         ],
     )
     from agent.models import StepResult
-    context = {"step_1": StepResult(step_id="step_1", tool_name="web_search", result={"results": []})}
+
+    context = {
+        "step_1": StepResult(step_id="step_1", tool_name="web_search", result={"results": []})
+    }
 
     # Should NOT raise even with non-JSON content
     reflection = await reflector.reflect("Sensitive question", plan, context)
@@ -97,6 +106,7 @@ async def test_agent_ends_cleanly_on_refusal() -> None:
         MockReflector.return_value = mock_reflector_instance
 
         from agent.budget import Budget
+
         agent = Agent()
         result = await agent.run("Sensitive question", budget=Budget(limit_usd=10.0))
 

@@ -93,13 +93,15 @@ class Planner:
 
         # Self-correction retry
         messages.append({"role": "assistant", "content": response.content})
-        messages.append({
-            "role": "user",
-            "content": (
-                f"Your response was not valid JSON. Error: {parse_error}. "
-                "Please respond with ONLY a valid JSON plan object, no other text."
-            ),
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"Your response was not valid JSON. Error: {parse_error}. "
+                    "Please respond with ONLY a valid JSON plan object, no other text."
+                ),
+            }
+        )
         response2 = await self._llm.call(
             messages=messages,
             model=settings.planner_model,

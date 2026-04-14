@@ -88,8 +88,20 @@ async def test_execution_proceeds_to_next_step_after_error() -> None:
     plan = Plan(
         question="Q",
         steps=[
-            PlanStep(step_id="step_1", action="a", tool="web_search", arguments={"query": "x"}, depends_on=[]),
-            PlanStep(step_id="step_2", action="b", tool="fetch_url", arguments={"url": "https://x.com"}, depends_on=[]),
+            PlanStep(
+                step_id="step_1",
+                action="a",
+                tool="web_search",
+                arguments={"query": "x"},
+                depends_on=[],
+            ),
+            PlanStep(
+                step_id="step_2",
+                action="b",
+                tool="fetch_url",
+                arguments={"url": "https://x.com"},
+                depends_on=[],
+            ),
         ],
     )
     executor = Executor(mcp=mock_mcp, retry_attempts=2)

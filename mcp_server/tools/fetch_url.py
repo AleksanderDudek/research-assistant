@@ -46,6 +46,7 @@ async def fetch_url(url: str) -> dict[str, Any]:
     if not text:
         # fallback: strip tags naively
         import re
+
         text = re.sub(r"<[^>]+>", " ", html)
         text = re.sub(r"\s+", " ", text).strip()
 

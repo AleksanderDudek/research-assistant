@@ -53,9 +53,26 @@ async def test_full_run_completes(mock_plan: Plan) -> None:
 
         executor_inst = AsyncMock()
         from agent.models import StepResult
+
         executor_inst.execute_plan.return_value = {
-            "step_1": StepResult(step_id="step_1", tool_name="web_search", result={"results": [{"title": "Apple", "url": "https://apple.com", "snippet": "AAPL market cap is $3T"}]}),
-            "step_2": StepResult(step_id="step_2", tool_name="fetch_url", result={"text": "Apple's market cap is approximately $3 trillion."}),
+            "step_1": StepResult(
+                step_id="step_1",
+                tool_name="web_search",
+                result={
+                    "results": [
+                        {
+                            "title": "Apple",
+                            "url": "https://apple.com",
+                            "snippet": "AAPL market cap is $3T",
+                        }
+                    ]
+                },
+            ),
+            "step_2": StepResult(
+                step_id="step_2",
+                tool_name="fetch_url",
+                result={"text": "Apple's market cap is approximately $3 trillion."},
+            ),
         }
         MockExecutor.return_value = executor_inst
 

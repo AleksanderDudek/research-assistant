@@ -15,9 +15,7 @@ class BudgetExceeded(Exception):
     def __init__(self, limit_usd: float, spent_usd: float) -> None:
         self.limit_usd = limit_usd
         self.spent_usd = spent_usd
-        super().__init__(
-            f"Budget exceeded: spent ${spent_usd:.4f} of ${limit_usd:.4f} limit"
-        )
+        super().__init__(f"Budget exceeded: spent ${spent_usd:.4f} of ${limit_usd:.4f} limit")
 
 
 class Budget:

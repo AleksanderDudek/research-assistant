@@ -40,9 +40,7 @@ class LLMClient:
     """
 
     def __init__(self, budget: Budget | None = None, api_key: str | None = None) -> None:
-        self._client = anthropic.AsyncAnthropic(
-            api_key=api_key or settings.anthropic_api_key
-        )
+        self._client = anthropic.AsyncAnthropic(api_key=api_key or settings.anthropic_api_key)
         self._budget = budget
         self._tracer = get_tracer("llm_client")
 
@@ -118,11 +116,13 @@ class LLMClient:
                 if block.type == "text":
                     content_parts.append(block.text)
                 elif block.type == "tool_use":
-                    raw_tool_calls.append({
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    })
+                    raw_tool_calls.append(
+                        {
+                            "id": block.id,
+                            "name": block.name,
+                            "input": block.input,
+                        }
+                    )
 
             return LLMResponse(
                 content="\n".join(content_parts),

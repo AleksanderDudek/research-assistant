@@ -103,16 +103,12 @@ class StepResult(BaseModel):
 class ReflectionOutput(BaseModel):
     """Output from the reflector LLM call."""
 
-    sufficient: bool = Field(
-        ..., description="True if there is enough info to answer the question"
-    )
+    sufficient: bool = Field(..., description="True if there is enough info to answer the question")
     additional_steps: list[PlanStep] = Field(
         default_factory=list,
         description="New steps to execute if not sufficient",
     )
-    final_answer: str = Field(
-        default="", description="Final cited answer when sufficient=True"
-    )
+    final_answer: str = Field(default="", description="Final cited answer when sufficient=True")
     reasoning: str = Field(default="", description="Why more steps are / are not needed")
 
 

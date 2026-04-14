@@ -29,9 +29,11 @@ def _resolve_arguments(
     Returns:
         Arguments dict with all templates resolved.
     """
+
     def _resolve_value(v: Any) -> Any:
         if not isinstance(v, str):
             return v
+
         # Replace all ${step_N.result} occurrences
         def replacer(m: re.Match[str]) -> str:
             step_id = m.group(1)
@@ -41,6 +43,7 @@ def _resolve_arguments(
             if isinstance(result, str):
                 return result
             import json
+
             return json.dumps(result)
 
         return re.sub(r"\$\{(step_\w+)\.result\}", replacer, v)

@@ -39,7 +39,10 @@ def _ensure_index() -> None:
         import numpy as np
         from sentence_transformers import SentenceTransformer
     except ImportError:
-        log.warning("search_kb.deps_missing", msg="faiss/sentence-transformers not installed; KB search disabled")  # noqa: E501
+        log.warning(
+            "search_kb.deps_missing",
+            msg="faiss/sentence-transformers not installed; KB search disabled",
+        )
         _index = "disabled"
         return
 
@@ -104,6 +107,7 @@ async def search_knowledge_base(query: str, top_k: int = _TOP_K) -> dict[str, An
         }
 
     import numpy as np
+
     idx, model = _index
 
     embedding = model.encode([query], convert_to_numpy=True, show_progress_bar=False)
@@ -115,11 +119,13 @@ async def search_knowledge_base(query: str, top_k: int = _TOP_K) -> dict[str, An
         if i < 0:
             continue
         doc = _documents[i]
-        results.append({
-            "source": doc["source"],
-            "text": doc["text"][:2000],  # cap per-result size
-            "score": float(1.0 / (1.0 + dist)),  # convert L2 to similarity-ish
-        })
+        results.append(
+            {
+                "source": doc["source"],
+                "text": doc["text"][:2000],  # cap per-result size
+                "score": float(1.0 / (1.0 + dist)),  # convert L2 to similarity-ish
+            }
+        )
 
     latency_ms = int((time.monotonic() - t0) * 1000)
     log.info("search_kb.done", query=query, n_results=len(results), latency_ms=latency_ms)

@@ -86,8 +86,20 @@ async def test_plan_continues_after_failed_step() -> None:
     plan = Plan(
         question="Q",
         steps=[
-            PlanStep(step_id="step_1", action="search", tool="web_search", arguments={"query": "x"}, depends_on=[]),
-            PlanStep(step_id="step_2", action="fetch", tool="fetch_url", arguments={"url": "https://example.com"}, depends_on=[]),
+            PlanStep(
+                step_id="step_1",
+                action="search",
+                tool="web_search",
+                arguments={"query": "x"},
+                depends_on=[],
+            ),
+            PlanStep(
+                step_id="step_2",
+                action="fetch",
+                tool="fetch_url",
+                arguments={"url": "https://example.com"},
+                depends_on=[],
+            ),
         ],
     )
     executor = Executor(mcp=mock_mcp, retry_attempts=2)

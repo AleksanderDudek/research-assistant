@@ -116,8 +116,14 @@ class Agent:
 
                     async with db_session() as session:
                         await append_step(
-                            session, run_id, ordinal, StepKind.REFLECT,
-                            {"sufficient": reflection.sufficient, "reasoning": reflection.reasoning},  # noqa: E501
+                            session,
+                            run_id,
+                            ordinal,
+                            StepKind.REFLECT,
+                            {
+                                "sufficient": reflection.sufficient,
+                                "reasoning": reflection.reasoning,
+                            },
                         )
                         ordinal += 1
 

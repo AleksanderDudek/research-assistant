@@ -83,9 +83,7 @@ class Reflector:
         log.info("reflector.reflect", question=question[:80], n_steps=len(context))
 
         summary = _summarise_results(context)
-        plan_json = json.dumps(
-            [s.model_dump() for s in plan.steps], indent=2, ensure_ascii=False
-        )
+        plan_json = json.dumps([s.model_dump() for s in plan.steps], indent=2, ensure_ascii=False)
 
         user_content = (
             f"Research question: {question}\n\n"

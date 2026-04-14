@@ -59,13 +59,13 @@ def run_python_in_sandbox(code: str) -> dict[str, Any]:
             image=_SANDBOX_IMAGE,
             command=["python3", "-c", code],
             detach=True,
-            network_mode="none",        # no network access
-            mem_limit=_MEMORY_LIMIT,    # memory cap
+            network_mode="none",  # no network access
+            mem_limit=_MEMORY_LIMIT,  # memory cap
             memswap_limit=_MEMORY_LIMIT,
-            read_only=False,            # tmpfs needs write
+            read_only=False,  # tmpfs needs write
             tmpfs={"/workspace": "rw,noexec,nosuid,size=64m"},
             working_dir="/workspace",
-            remove=False,               # we remove manually after capture
+            remove=False,  # we remove manually after capture
         )
 
         timed_out = False

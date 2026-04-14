@@ -1,0 +1,36 @@
+# ── Stage 1: build dependencies ───────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install uv for fast dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+# Non-root user for security
+RUN groupadd --gid 1001 agent && useradd --uid 1001 --gid agent --no-create-home agent
+
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /build/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy source
+COPY agent/ ./agent/
+COPY db/ ./db/
+COPY alembic.ini ./
+
+# Alembic migration entrypoint (run before starting agent)
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+USER agent
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "-m", "agent.cli", "--help"]

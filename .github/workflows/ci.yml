@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.11.6"
+
+jobs:
+  # ── Lint & format ─────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run ruff (lint)
+        run: uv run ruff check .
+
+      - name: Run ruff (format check)
+        run: uv run ruff format --check .
+
+  # ── Type checking ─────────────────────────────────────────────────────────
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run mypy
+        run: uv run mypy agent/ mcp_server/ db/ --ignore-missing-imports
+
+  # ── Unit tests ────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run unit tests
+        env:
+          ANTHROPIC_API_KEY: "test-key-ci"
+          DATABASE_URL: "postgresql+asyncpg://agent:agent@localhost:5432/agent"
+          TAVILY_API_KEY: "test-key-ci"
+        run: uv run pytest tests/unit/ -v --timeout=30
+
+  # ── Failure-mode tests ────────────────────────────────────────────────────
+  failure-mode-tests:
+    name: Failure Mode Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run failure-mode tests
+        env:
+          ANTHROPIC_API_KEY: "test-key-ci"
+          DATABASE_URL: "postgresql+asyncpg://agent:agent@localhost:5432/agent"
+          TAVILY_API_KEY: "test-key-ci"
+        run: uv run pytest tests/failure_modes/ -v --timeout=60
+
+  # ── Integration tests (mocked, no real DB needed) ─────────────────────────
+  integration-tests:
+    name: Integration Tests (Mocked)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run integration tests
+        env:
+          ANTHROPIC_API_KEY: "test-key-ci"
+          DATABASE_URL: "postgresql+asyncpg://agent:agent@localhost:5432/agent"
+          TAVILY_API_KEY: "test-key-ci"
+        run: uv run pytest tests/integration/ -v --timeout=60
+
+  # ── Docker build ──────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build MCP server image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.mcp
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

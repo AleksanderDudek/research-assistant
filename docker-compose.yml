@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  # ── Postgres ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  # ── Jaeger (all-in-one, for local dev) ───────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:16686/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MCP server ───────────────────────────────────────────────────────────
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      SANDBOX_IMAGE: python:3.11-slim
+      SANDBOX_TIMEOUT_SECONDS: "10"
+      SANDBOX_MEMORY_LIMIT: 128m
+      MCP_TRANSPORT: stdio
+      LOG_LEVEL: INFO
+    volumes:
+      # Mount Docker socket so the MCP server can spin sandbox containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+
+  # ── Agent ────────────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      DATABASE_URL: postgresql+asyncpg://agent:agent@postgres:5432/agent
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: agentic-research-assistant
+      MCP_SERVER_URL: http://mcp-server:8001
+      DEFAULT_BUDGET_USD: "2.00"
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:

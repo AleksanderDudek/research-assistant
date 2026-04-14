@@ -1,0 +1,33 @@
+# ── Stage 1: build ────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+# Docker CLI is needed by the execute_python sandbox tool
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1001 mcp && useradd --uid 1001 --gid mcp --no-create-home mcp
+# Add mcp user to docker group so it can call the Docker daemon
+RUN usermod -aG docker mcp 2>/dev/null || true
+
+WORKDIR /app
+
+COPY --from=builder /build/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+COPY mcp_server/ ./mcp_server/
+COPY agent/config.py ./agent/config.py
+COPY agent/__init__.py ./agent/__init__.py
+
+USER mcp
+
+CMD ["python", "-m", "mcp_server.server"]

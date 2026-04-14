@@ -35,11 +35,11 @@ def _ensure_index() -> None:
         return  # already loaded
 
     try:
-        import faiss  # type: ignore[import]
+        import faiss
         import numpy as np
-        from sentence_transformers import SentenceTransformer  # type: ignore[import]
+        from sentence_transformers import SentenceTransformer
     except ImportError:
-        log.warning("search_kb.deps_missing", msg="faiss/sentence-transformers not installed; KB search disabled")
+        log.warning("search_kb.deps_missing", msg="faiss/sentence-transformers not installed; KB search disabled")  # noqa: E501
         _index = "disabled"
         return
 
@@ -75,7 +75,7 @@ def _ensure_index() -> None:
     embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
     dim = embeddings.shape[1]
     idx = faiss.IndexFlatL2(dim)
-    idx.add(embeddings.astype(np.float32))  # type: ignore[arg-type]
+    idx.add(embeddings.astype(np.float32))
     _index = (idx, model)
     log.info("search_kb.index_built", n_docs=len(_documents))
 

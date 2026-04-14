@@ -83,7 +83,7 @@ def run_python_in_sandbox(code: str) -> dict[str, Any]:
     finally:
         try:
             container.remove(force=True)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     latency_ms = int((time.monotonic() - t0) * 1000)

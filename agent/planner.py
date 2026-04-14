@@ -20,8 +20,8 @@ _TOOL_DESCRIPTIONS = """
 - web_search(query, max_results=5): Search the web. Returns [{title, url, snippet}].
 - fetch_url(url): Download and extract text from a URL. Returns {url, text, char_count}.
 - read_pdf(source): Extract text from a PDF (path or URL). Returns {text, page_count}.
-- execute_python(code): Run Python in a sandboxed Docker container. Returns {stdout, stderr, exit_code}.
-- search_knowledge_base(query, top_k=5): Search local knowledge base. Returns [{source, text, score}].
+- execute_python(code): Run Python in a Docker sandbox. Returns {stdout, stderr, exit_code}.
+- search_knowledge_base(query, top_k=5): Search local KB. Returns [{source, text, score}].
 """.strip()
 
 

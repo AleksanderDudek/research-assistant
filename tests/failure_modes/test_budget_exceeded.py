@@ -14,11 +14,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.budget import Budget, BudgetExceeded
-from agent.models import LLMResponse, RunStatus
-from tests.conftest import make_llm_response
+from agent.models import RunStatus
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_exceeded_raises_immediately() -> None:
     """BudgetExceeded is raised as soon as Budget.charge() is called over limit."""
     b = Budget(limit_usd=0.001)
@@ -26,7 +25,7 @@ async def test_budget_exceeded_raises_immediately() -> None:
         b.charge(1.00)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_budget_status_after_exceeded() -> None:
     """After exceeding, spent() reflects the overage, remaining() is 0."""
     b = Budget(limit_usd=0.10)
@@ -38,7 +37,7 @@ async def test_budget_status_after_exceeded() -> None:
     assert b.remaining() == 0.0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_llm_client_raises_budget_exceeded() -> None:
     """LLMClient.call() propagates BudgetExceeded from the budget."""
     from agent.llm_client import LLMClient
@@ -67,11 +66,11 @@ async def test_llm_client_raises_budget_exceeded() -> None:
             )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_agent_marks_run_halted_over_budget() -> None:
     """When BudgetExceeded propagates to the agent, it sets HALTED_OVER_BUDGET."""
-    from agent.core import Agent
     from agent.budget import Budget
+    from agent.core import Agent
 
     # Use a tiny budget that will be exceeded by the first LLM call
     tiny_budget = Budget(limit_usd=0.00001)

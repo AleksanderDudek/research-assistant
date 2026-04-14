@@ -16,18 +16,17 @@ import pytest
 
 from agent.models import Plan, PlanStep, ReflectionOutput, RunStatus
 
-
 REFUSAL_TEXT = (
     "I'm unable to help with that request as it may violate usage policies. "
     "Please rephrase your question."
 )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_reflector_handles_refusal_gracefully() -> None:
     """Reflector treats a refusal response as sufficient=True with refusal text."""
-    from agent.reflector import Reflector
     from agent.llm_client import LLMClient
+    from agent.reflector import Reflector
     from tests.conftest import make_llm_response
 
     mock_llm = AsyncMock(spec=LLMClient)
@@ -52,7 +51,7 @@ async def test_reflector_handles_refusal_gracefully() -> None:
     assert reflection.sufficient is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_agent_ends_cleanly_on_refusal() -> None:
     """The agent writes the refusal to state and returns without crashing."""
     from agent.core import Agent

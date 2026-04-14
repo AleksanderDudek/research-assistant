@@ -6,9 +6,8 @@ from typing import Any
 
 import anthropic
 import structlog
-from opentelemetry import trace
 
-from agent.budget import Budget, BudgetExceeded
+from agent.budget import Budget
 from agent.config import settings
 from agent.models import LLMResponse
 from agent.telemetry import get_tracer

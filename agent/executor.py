@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-import uuid
 from typing import Any
 
 import structlog
 
 from agent.config import settings
 from agent.mcp_client import MCPClient, MCPError
-from agent.models import Plan, PlanStep, StepKind, StepResult
+from agent.models import Plan, PlanStep, StepResult
 
 log = structlog.get_logger(__name__)
 
@@ -34,7 +33,7 @@ def _resolve_arguments(
         if not isinstance(v, str):
             return v
         # Replace all ${step_N.result} occurrences
-        def replacer(m: re.Match) -> str:  # type: ignore[type-arg]
+        def replacer(m: re.Match[str]) -> str:
             step_id = m.group(1)
             if step_id not in context:
                 return m.group(0)  # leave unresolved if step not done
@@ -126,7 +125,7 @@ class Executor:
                     tool_name=step.tool,
                     result=result,
                 )
-            except (MCPError, asyncio.TimeoutError, Exception) as exc:
+            except (TimeoutError, MCPError, Exception) as exc:
                 last_error = str(exc)
                 log.warning(
                     "executor.step_error",

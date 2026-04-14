@@ -1,4 +1,4 @@
-"""Budget tracking – raises BudgetExceeded when the USD limit is crossed."""
+"""Budget tracking - raises BudgetExceeded when the USD limit is crossed."""
 
 from __future__ import annotations
 
@@ -62,4 +62,9 @@ class Budget:
                     spent_usd=self._spent,
                 )
                 raise BudgetExceeded(self._limit, self._spent)
-        log.debug("budget.charged", cost_usd=cost_usd, spent_usd=self._spent, remaining=self.remaining())
+        log.debug(
+            "budget.charged",
+            cost_usd=cost_usd,
+            spent_usd=self._spent,
+            remaining=self.remaining(),
+        )

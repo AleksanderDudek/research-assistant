@@ -32,7 +32,7 @@ def _single_step_plan() -> Plan:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_mcp_error_on_malformed_response() -> None:
     """When the MCP client raises MCPError (from malformed JSON), the step is failed."""
     mock_mcp = AsyncMock(spec=MCPClient)
@@ -47,7 +47,7 @@ async def test_mcp_error_on_malformed_response() -> None:
     assert step.result is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_empty_results_still_stored() -> None:
     """An empty dict result is stored without error (tool returned nothing)."""
     mock_mcp = AsyncMock(spec=MCPClient)
@@ -61,7 +61,7 @@ async def test_empty_results_still_stored() -> None:
     assert step.result == {}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_unexpected_exception_marks_step_failed() -> None:
     """Any unexpected exception from the MCP call marks the step as failed."""
     mock_mcp = AsyncMock(spec=MCPClient)
@@ -75,7 +75,7 @@ async def test_unexpected_exception_marks_step_failed() -> None:
     assert step.error is not None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_execution_proceeds_to_next_step_after_error() -> None:
     """A failed step does not block subsequent independent steps."""
     mock_mcp = AsyncMock(spec=MCPClient)

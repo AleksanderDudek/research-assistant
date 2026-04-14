@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.models import LLMResponse
 from agent.planner import Planner
 from tests.conftest import SAMPLE_PLAN_JSON, make_llm_response
 
 
-@pytest.fixture()
+@pytest.fixture
 def planner(mock_llm: AsyncMock) -> Planner:
     return Planner(llm=mock_llm)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_planner_returns_plan(planner: Planner, mock_llm: AsyncMock) -> None:
     mock_llm.call.return_value = make_llm_response(content=SAMPLE_PLAN_JSON)
     plan = await planner.plan("What is the current market cap of Apple?")
@@ -24,7 +23,7 @@ async def test_planner_returns_plan(planner: Planner, mock_llm: AsyncMock) -> No
     assert len(plan.steps) == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_planner_has_web_search_step(planner: Planner, mock_llm: AsyncMock) -> None:
     """For an Apple market-cap question the plan must include a web_search step."""
     mock_llm.call.return_value = make_llm_response(content=SAMPLE_PLAN_JSON)
@@ -33,7 +32,7 @@ async def test_planner_has_web_search_step(planner: Planner, mock_llm: AsyncMock
     assert "web_search" in tools_used
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_planner_has_fetch_or_search(planner: Planner, mock_llm: AsyncMock) -> None:
     """Plan should include a fetch_url or search step after web_search."""
     mock_llm.call.return_value = make_llm_response(content=SAMPLE_PLAN_JSON)
@@ -42,7 +41,7 @@ async def test_planner_has_fetch_or_search(planner: Planner, mock_llm: AsyncMock
     assert tools_used & {"fetch_url", "search_knowledge_base"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_planner_retries_on_invalid_json(planner: Planner, mock_llm: AsyncMock) -> None:
     """On bad JSON, planner retries once and succeeds on the second call."""
     good_response = make_llm_response(content=SAMPLE_PLAN_JSON)
@@ -55,7 +54,7 @@ async def test_planner_retries_on_invalid_json(planner: Planner, mock_llm: Async
     assert mock_llm.call.call_count == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_planner_depends_on_respected(planner: Planner, mock_llm: AsyncMock) -> None:
     mock_llm.call.return_value = make_llm_response(content=SAMPLE_PLAN_JSON)
     plan = await planner.plan("Question?")

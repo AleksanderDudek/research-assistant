@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Optional
 
 import structlog
 import typer
@@ -49,7 +48,7 @@ def _setup() -> None:
 def run(
     question: str = typer.Argument(..., help="The research question to investigate"),
     budget: float = typer.Option(settings.default_budget_usd, help="Max USD budget for this run"),
-    mcp_url: Optional[str] = typer.Option(None, help="Override MCP server URL"),
+    mcp_url: str | None = typer.Option(None, help="Override MCP server URL"),
 ) -> None:
     """Run the research agent on a new question."""
     _setup()
@@ -79,7 +78,7 @@ def run(
 def resume(
     run_id: str = typer.Argument(..., help="UUID of the run to resume"),
     budget: float = typer.Option(settings.default_budget_usd, help="Max USD budget for this run"),
-    mcp_url: Optional[str] = typer.Option(None, help="Override MCP server URL"),
+    mcp_url: str | None = typer.Option(None, help="Override MCP server URL"),
 ) -> None:
     """Resume a previously started run."""
     _setup()

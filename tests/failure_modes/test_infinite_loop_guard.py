@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.config import settings
-from agent.models import Plan, PlanStep, ReflectionOutput, RunStatus
+from agent.models import PlanStep, ReflectionOutput, RunStatus
 
 
 def _always_insufficient_reflection() -> ReflectionOutput:
@@ -35,11 +35,11 @@ def _always_insufficient_reflection() -> ReflectionOutput:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_agent_halts_after_max_replan_cycles() -> None:
     """The agent stops replanning after max_replan_cycles and sets HALTED_REPLAN_LIMIT."""
-    from agent.core import Agent
     from agent.budget import Budget
+    from agent.core import Agent
 
     with (
         patch("agent.core.Planner") as MockPlanner,
@@ -83,11 +83,11 @@ async def test_agent_halts_after_max_replan_cycles() -> None:
     assert call_kwargs["status"] == RunStatus.HALTED_REPLAN_LIMIT
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_reflector_called_at_most_max_replan_plus_one_times() -> None:
     """Reflector is called initial + max_replan_cycles times, then we stop."""
-    from agent.core import Agent
     from agent.budget import Budget
+    from agent.core import Agent
 
     reflect_calls: list[int] = []
 

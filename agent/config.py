@@ -46,5 +46,5 @@ class Settings(BaseSettings):
     tool_timeout_seconds: float = 30.0
 
 
-# Singleton – import this everywhere
-settings = Settings()  # type: ignore[call-arg]
+# Singleton - import this everywhere
+settings = Settings()

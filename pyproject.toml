@@ -52,14 +52,15 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "ANN", "S", "B", "A", "C4", "PT", "RUF"]
 ignore = [
-    "ANN101",  # missing type annotation for self
-    "ANN102",  # missing type annotation for cls
     "S101",    # use of assert (fine in tests)
     "ANN401",  # dynamically typed Any
+    "N818",    # exception names don't require Error suffix (BudgetExceeded is intentional)
+    "RUF002",  # EN DASH in docstrings – cosmetic, used throughout for readability
+    "RUF003",  # EN DASH in comments – same as above
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN", "S"]
+"tests/**" = ["ANN", "S", "N806", "E501", "F841", "PT011", "RUF043"]
 
 [tool.mypy]
 python_version = "3.11"

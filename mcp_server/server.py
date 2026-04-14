@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from typing import Any
 
 import structlog
 from mcp.server import Server
@@ -34,7 +35,7 @@ log = structlog.get_logger(__name__)
 TOOLS: list[Tool] = [
     Tool(
         name="web_search",
-        description="Search the web for current information. Returns a list of {title, url, snippet} results.",
+        description="Search the web for current information. Returns [{title, url, snippet}].",
         inputSchema={
             "type": "object",
             "properties": {
@@ -52,7 +53,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="fetch_url",
-        description="Fetch a URL and return its main text content (boilerplate stripped). Max 500 KB.",
+        description="Fetch a URL and return its main text content (boilerplate stripped). Max 500 KB.",  # noqa: E501
         inputSchema={
             "type": "object",
             "properties": {
@@ -151,12 +152,12 @@ async def _dispatch(name: str, args: dict) -> dict:  # type: ignore[type-arg]
 def build_server() -> Server:
     server = Server("research-tools")
 
-    @server.list_tools()  # type: ignore[misc]
+    @server.list_tools()  # type: ignore[no-untyped-call, untyped-decorator]
     async def list_tools() -> list[Tool]:
         return TOOLS
 
-    @server.call_tool()  # type: ignore[misc]
-    async def call_tool(name: str, arguments: dict) -> list[TextContent]:  # type: ignore[type-arg]
+    @server.call_tool()  # type: ignore[untyped-decorator]
+    async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         import json
 
         result = await _dispatch(name, arguments)

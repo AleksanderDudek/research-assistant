@@ -6,14 +6,13 @@ import asyncio
 import os
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
-
 # Import ORM metadata so autogenerate can detect changes
-from db.models import Base  # noqa: E402
+from db.models import Base
 
 config = context.config
 

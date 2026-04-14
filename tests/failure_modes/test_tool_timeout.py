@@ -9,7 +9,6 @@ The executor should:
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -34,11 +33,11 @@ def _make_single_step_plan() -> Plan:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_tool_timeout_retries_and_marks_failed() -> None:
     """When a tool times out on every attempt, the step is marked failed."""
     mock_mcp = AsyncMock(spec=MCPClient)
-    mock_mcp.call_tool.side_effect = asyncio.TimeoutError("tool timed out")
+    mock_mcp.call_tool.side_effect = TimeoutError("tool timed out")
 
     executor = Executor(mcp=mock_mcp, retry_attempts=2)
     plan = _make_single_step_plan()
@@ -51,12 +50,12 @@ async def test_tool_timeout_retries_and_marks_failed() -> None:
     assert mock_mcp.call_tool.call_count == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_tool_timeout_then_success_on_retry() -> None:
     """When the first call times out but the second succeeds, result is captured."""
     mock_mcp = AsyncMock(spec=MCPClient)
     mock_mcp.call_tool.side_effect = [
-        asyncio.TimeoutError("timeout"),
+        TimeoutError("timeout"),
         {"results": [{"title": "ok", "url": "https://example.com", "snippet": "good"}]},
     ]
 
@@ -73,14 +72,14 @@ async def test_tool_timeout_then_success_on_retry() -> None:
     assert mock_mcp.call_tool.call_count == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_plan_continues_after_failed_step() -> None:
     """Execution continues to subsequent steps even if one step fails."""
     mock_mcp = AsyncMock(spec=MCPClient)
     # step_1 times out, step_2 succeeds
     mock_mcp.call_tool.side_effect = [
-        asyncio.TimeoutError(),
-        asyncio.TimeoutError(),
+        TimeoutError(),
+        TimeoutError(),
         {"text": "fallback content"},
     ]
 

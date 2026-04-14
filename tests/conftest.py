@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import uuid
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from agent.budget import Budget
 from agent.llm_client import LLMClient
 from agent.mcp_client import MCPClient
-from agent.models import LLMResponse, StepResult
-
+from agent.models import LLMResponse
 
 # ---------------------------------------------------------------------------
 # Event loop
@@ -30,12 +27,12 @@ def event_loop_policy():  # type: ignore[override]
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def generous_budget() -> Budget:
     return Budget(limit_usd=100.0)
 
 
-@pytest.fixture()
+@pytest.fixture
 def tight_budget() -> Budget:
     return Budget(limit_usd=0.001)
 
@@ -68,7 +65,7 @@ def make_llm_response(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm(generous_budget: Budget) -> AsyncMock:
     """A mock LLMClient whose .call() returns a configurable LLMResponse."""
     client = AsyncMock(spec=LLMClient)
@@ -81,7 +78,7 @@ def mock_llm(generous_budget: Budget) -> AsyncMock:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_mcp() -> AsyncMock:
     """A mock MCPClient whose .call_tool() returns an empty dict by default."""
     client = AsyncMock(spec=MCPClient)

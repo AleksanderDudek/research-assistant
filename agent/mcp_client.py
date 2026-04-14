@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import subprocess
 import time
-from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import structlog
-from opentelemetry import trace
 
 from agent.config import settings
 from agent.telemetry import get_tracer
@@ -65,7 +62,7 @@ class MCPClient:
                     self._http_call(tool_name, arguments),
                     timeout=self._timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 span.set_attribute("tool.timed_out", True)
                 raise
             except Exception as exc:
@@ -115,4 +112,4 @@ class MCPClient:
             response = await client.post(self._server_url, json=payload)
             response.raise_for_status()
             data = response.json()
-        return data.get("result", {}).get("tools", [])
+        return cast("list[dict[str, Any]]", data.get("result", {}).get("tools", []))

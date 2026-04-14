@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -23,7 +22,7 @@ class RunStatus(str, Enum):
     HALTED_REPLAN_LIMIT = "halted_replan_limit"
 
 
-class StepKind(str, Enum):
+class StepKind(StrEnum):
     PLAN = "plan"
     EXECUTE = "execute"
     REFLECT = "reflect"

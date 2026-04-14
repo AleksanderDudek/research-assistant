@@ -14,17 +14,17 @@ import pytest
 
 from agent.budget import Budget
 from agent.models import Plan, PlanStep, ReflectionOutput, RunStatus
-from tests.conftest import SAMPLE_PLAN_JSON, make_llm_response
+from tests.conftest import SAMPLE_PLAN_JSON
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_plan() -> Plan:
     data = json.loads(SAMPLE_PLAN_JSON)
     steps = [PlanStep(**s) for s in data["steps"]]
     return Plan(question=data["question"], steps=steps, rationale=data.get("rationale", ""))
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_full_run_completes(mock_plan: Plan) -> None:
     """A full run with mocked LLM and MCP should reach COMPLETED status."""
     from agent.core import Agent
@@ -76,7 +76,7 @@ async def test_full_run_completes(mock_plan: Plan) -> None:
     assert "Apple" in call_kwargs["final_answer"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_full_run_includes_citations(mock_plan: Plan) -> None:
     """Final answer should include citation markers when sufficient."""
     from agent.core import Agent

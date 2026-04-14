@@ -1,10 +1,9 @@
-"""Agent core – orchestrates plan → execute → reflect → replan loop."""
+"""Agent core - orchestrates plan -> execute -> reflect -> replan loop."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,9 +17,7 @@ from agent.models import Plan, RunRecord, RunStatus, StepKind, StepResult
 from agent.planner import Planner
 from agent.reflector import Reflector
 from agent.state import (
-    append_message,
     append_step,
-    append_tool_call,
     create_run,
     get_completed_steps,
     load_run,
@@ -77,6 +74,7 @@ class Agent:
             span.set_attribute("agent.question", question[:200])
             span.set_attribute("agent.budget_usd", budget.limit_usd)
 
+            context: dict[str, StepResult]
             if resume_run_id is not None:
                 run_record = await load_run(resume_run_id)
                 log.info("agent.resume", run_id=str(resume_run_id), status=run_record.status.value)
@@ -87,7 +85,7 @@ class Agent:
                 context = await self._restore_context(run_record.id)
             else:
                 run_record = await create_run(question)
-                context: dict[str, StepResult] = {}
+                context = {}
 
             run_id = run_record.id
             replan_count = run_record.replan_count
@@ -119,7 +117,7 @@ class Agent:
                     async with db_session() as session:
                         await append_step(
                             session, run_id, ordinal, StepKind.REFLECT,
-                            {"sufficient": reflection.sufficient, "reasoning": reflection.reasoning},
+                            {"sufficient": reflection.sufficient, "reasoning": reflection.reasoning},  # noqa: E501
                         )
                         ordinal += 1
 
@@ -139,7 +137,11 @@ class Agent:
                         status = RunStatus.HALTED_REPLAN_LIMIT
                         break
 
-                    log.info("agent.replan", cycle=replan_count, n_new_steps=len(reflection.additional_steps))
+                    log.info(
+                        "agent.replan",
+                        cycle=replan_count,
+                        n_new_steps=len(reflection.additional_steps),
+                    )
                     # Extend the plan with additional steps from the reflector
                     plan = Plan(
                         question=question,
@@ -216,7 +218,7 @@ class Agent:
             for step_id, step_dict in step_data.items():
                 try:
                     context[step_id] = StepResult(**step_dict)
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
         log.info("agent.restored_context", n_steps=len(context))
         return context

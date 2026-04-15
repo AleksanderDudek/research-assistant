@@ -361,6 +361,9 @@ async def run_research(request: Request) -> Response:
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=5.0)
                     yield _SSE + json.dumps(msg) + "\n\n"
+                    # Trailing SSE comment ensures nginx flushes the final chunk
+                    # before the generator returns, preventing ERR_INCOMPLETE_CHUNKED_ENCODING
+                    yield ": done\n\n"
                     return
                 except TimeoutError:
                     tick += 1

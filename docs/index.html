@@ -600,7 +600,7 @@
       const isTimeout = err instanceof DOMException && err.name === 'AbortError';
       showError(isTimeout
         ? 'Request timed out after 4 minutes. Please try again.'
-        : 'Could not reach the server. It may be restarting — please try again in a moment.');
+        : 'Connection to the server was interrupted. Please try again.');
     } finally {
       setLoading(false);
     }

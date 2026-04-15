@@ -303,12 +303,74 @@ def homepage(request: Request) -> HTMLResponse:
 
 
 _MAX_QUESTION = 2000
-_SSE = "data: "  # SSE line prefix
+_SSE = "data: "       # SSE data line prefix
+_SSE_END = ": end\n\n"  # SSE comment that flushes the final nginx buffer
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
 }
+
+
+def _sse(payload: dict[str, object]) -> str:
+    return _SSE + json.dumps(payload) + "\n\n"
+
+
+async def _agent_task(
+    question: str,
+    queue: asyncio.Queue[dict[str, object]],
+) -> None:
+    """Run the agent and post the result to *queue*.  Never raises."""
+    from agent.budget import Budget  # lazy — avoids eager settings load at startup
+    from agent.core import Agent
+
+    try:
+        record = await Agent().run(question=question, budget=Budget(limit_usd=2.00))
+        await queue.put({"type": "done", "answer": record.final_answer or "(no answer)"})
+    except asyncio.CancelledError:
+        raise  # task cancelled by the stream finaliser — propagate correctly
+    except Exception as exc:
+        log.exception("agent.run_error", error=str(exc))
+        await queue.put(
+            {"type": "error", "message": f"Research failed ({type(exc).__name__}): {exc}"}
+        )
+
+
+async def _research_stream(
+    question: str,
+    ip: str,
+) -> AsyncGenerator[str, None]:
+    """SSE generator for a single research request."""
+    allowed, rate_msg = _check_and_record(ip)
+    if not allowed:
+        yield _sse({"type": "error", "message": rate_msg})
+        yield _SSE_END
+        return
+
+    yield _sse({"type": "status", "text": "Starting research\u2026"})
+
+    queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+    task = asyncio.create_task(_agent_task(question, queue))
+    tick = 0
+    try:
+        while True:
+            try:
+                msg = await asyncio.wait_for(queue.get(), timeout=5.0)
+                yield _sse(msg)
+                yield _SSE_END
+                return
+            except TimeoutError:
+                tick += 1
+                yield _sse({"type": "status", "text": f"Researching\u2026 ({tick * 5}s elapsed)"})
+    except Exception as exc:
+        log.exception("stream.fatal", error=str(exc))
+        try:
+            yield _sse({"type": "error", "message": f"Stream error ({type(exc).__name__}): {exc}"})
+            yield _SSE_END
+        except Exception:  # generator already broken; swallow to avoid masking original error
+            pass
+    finally:
+        task.cancel()
 
 
 async def run_research(request: Request) -> Response:
@@ -326,62 +388,8 @@ async def run_research(request: Request) -> Response:
 
     ip = _get_ip(request)
 
-    async def stream() -> AsyncGenerator[str, None]:
-        # ── Rate limit ──────────────────────────────────────────────────────
-        allowed, rate_msg = _check_and_record(ip)
-        if not allowed:
-            yield _SSE + json.dumps({"type": "error", "message": rate_msg}) + "\n\n"
-            return
-
-        yield _SSE + json.dumps({"type": "status", "text": "Starting research\u2026"}) + "\n\n"
-
-        # ── Agent run in background task ────────────────────────────────────
-        from agent.budget import Budget  # lazy import — avoids eager settings load
-        from agent.core import Agent
-
-        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
-
-        async def _run() -> None:
-            try:
-                record = await Agent().run(question=question, budget=Budget(limit_usd=2.00))
-                await queue.put({"type": "done", "answer": record.final_answer or "(no answer)"})
-            except Exception as exc:
-                log.exception("agent.run_error", error=str(exc))
-                await queue.put(
-                    {
-                        "type": "error",
-                        "message": "Research failed due to an internal error. Please try again.",
-                    }
-                )
-
-        task = asyncio.create_task(_run())
-        tick = 0
-        try:
-            while True:
-                try:
-                    msg = await asyncio.wait_for(queue.get(), timeout=5.0)
-                    yield _SSE + json.dumps(msg) + "\n\n"
-                    # Trailing SSE comment ensures nginx flushes the final chunk
-                    # before the generator returns, preventing ERR_INCOMPLETE_CHUNKED_ENCODING
-                    yield ": done\n\n"
-                    return
-                except TimeoutError:
-                    tick += 1
-                    yield (
-                        _SSE
-                        + json.dumps(
-                            {
-                                "type": "status",
-                                "text": f"Researching\u2026 ({tick * 5}s elapsed)",
-                            }
-                        )
-                        + "\n\n"
-                    )
-        finally:
-            task.cancel()
-
     return StreamingResponse(
-        stream(),
+        _research_stream(question, ip),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

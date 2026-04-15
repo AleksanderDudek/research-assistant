@@ -303,7 +303,7 @@ def homepage(request: Request) -> HTMLResponse:
 
 
 _MAX_QUESTION = 2000
-_SSE = "data: "       # SSE data line prefix
+_SSE = "data: "  # SSE data line prefix
 _SSE_END = ": end\n\n"  # SSE comment that flushes the final nginx buffer
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",

@@ -60,7 +60,9 @@ def _check_and_record(ip: str) -> tuple[bool, str]:
 
     today = date.today().isoformat()
     now = datetime.now().timestamp()
-    entry: dict[str, object] = raw.get(ip, {})
+    raw_entry = raw.get(ip, {})
+    # Guard against stale file written by an older version (value may be a string)
+    entry: dict[str, object] = raw_entry if isinstance(raw_entry, dict) else {}
 
     if entry.get("date") != today:
         entry = {"date": today, "count": 0, "last_ts": 0.0}

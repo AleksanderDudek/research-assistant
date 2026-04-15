@@ -367,8 +367,8 @@ async def _research_stream(
         try:
             yield _sse({"type": "error", "message": f"Stream error ({type(exc).__name__}): {exc}"})
             yield _SSE_END
-        except Exception:  # generator already broken; swallow to avoid masking original error
-            pass
+        except Exception as write_exc:
+            log.debug("stream.error_write_failed", error=str(write_exc))
     finally:
         task.cancel()
 

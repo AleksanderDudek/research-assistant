@@ -59,7 +59,6 @@ services:
     volumes:
       - web_data:/data
     ports:
-      # Bind to loopback only — nginx handles TLS termination on 80/443
       - "127.0.0.1:8080:8080"
     depends_on:
       - mcp-server

@@ -14,7 +14,7 @@ import json
 import logging
 import os
 from collections.abc import AsyncGenerator
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import structlog
@@ -40,27 +40,56 @@ def _get_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _check_and_record(ip: str) -> bool:
-    """Return True (request allowed) or False (rate limited).
+_MAX_DAILY = 3
+_COOLDOWN_SECS = 3600
 
-    Reads and writes RATE_LIMIT_FILE synchronously. Safe inside a single-process
-    asyncio event loop — there are no yield points so it executes atomically.
+
+def _check_and_record(ip: str) -> tuple[bool, str]:
+    """Return (allowed, error_message).
+
+    Enforces: max 3 requests per day per IP, with a 60-minute cooldown between
+    each request. Reads/writes RATE_LIMIT_FILE synchronously — safe inside a
+    single-process asyncio event loop (no yield points → executes atomically).
     """
     try:
-        limits: dict[str, str] = (
+        raw: dict[str, dict[str, object]] = (
             json.loads(RATE_LIMIT_FILE.read_text()) if RATE_LIMIT_FILE.exists() else {}
         )
     except Exception:
-        limits = {}
+        raw = {}
 
     today = date.today().isoformat()
-    if limits.get(ip) == today:
-        return False
+    now = datetime.now().timestamp()
+    entry: dict[str, object] = raw.get(ip, {})
 
-    limits[ip] = today
+    if entry.get("date") != today:
+        entry = {"date": today, "count": 0, "last_ts": 0.0}
+
+    count = int(entry.get("count", 0))
+    last_ts = float(entry.get("last_ts", 0.0))
+
+    if last_ts > 0:
+        elapsed = now - last_ts
+        if elapsed < _COOLDOWN_SECS:
+            wait = int(_COOLDOWN_SECS - elapsed)
+            mins, secs = divmod(wait, 60)
+            remaining = _MAX_DAILY - count
+            return (
+                False,
+                f"Please wait {mins}m {secs:02d}s before your next request "
+                f"({remaining} remaining today).",
+            )
+
+    if count >= _MAX_DAILY:
+        return False, f"Daily limit reached ({_MAX_DAILY} requests/day). Resets at midnight."
+
+    entry["count"] = count + 1
+    entry["last_ts"] = now
+    entry["date"] = today
+    raw[ip] = entry
     RATE_LIMIT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    RATE_LIMIT_FILE.write_text(json.dumps(limits))
-    return True
+    RATE_LIMIT_FILE.write_text(json.dumps(raw))
+    return True, ""
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +303,7 @@ async def homepage(request: Request) -> HTMLResponse:
 
 
 _MAX_QUESTION = 2000
+_SSE = "data: "  # SSE line prefix
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -298,23 +328,12 @@ async def run_research(request: Request) -> Response:
 
     async def stream() -> AsyncGenerator[str, None]:
         # ── Rate limit ──────────────────────────────────────────────────────
-        if not _check_and_record(ip):
-            yield (
-                "data: "
-                + json.dumps(
-                    {
-                        "type": "error",
-                        "message": (
-                            "Rate limit reached: 1 request per day per IP address. "
-                            "Please try again tomorrow."
-                        ),
-                    }
-                )
-                + "\n\n"
-            )
+        allowed, rate_msg = _check_and_record(ip)
+        if not allowed:
+            yield _SSE + json.dumps({"type": "error", "message": rate_msg}) + "\n\n"
             return
 
-        yield "data: " + json.dumps({"type": "status", "text": "Starting research\u2026"}) + "\n\n"
+        yield _SSE + json.dumps({"type": "status", "text": "Starting research\u2026"}) + "\n\n"
 
         # ── Agent run in background task ────────────────────────────────────
         from agent.budget import Budget  # lazy import — avoids eager settings load
@@ -341,12 +360,12 @@ async def run_research(request: Request) -> Response:
             while True:
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=5.0)
-                    yield "data: " + json.dumps(msg) + "\n\n"
+                    yield _SSE + json.dumps(msg) + "\n\n"
                     return
                 except TimeoutError:
                     tick += 1
                     yield (
-                        "data: "
+                        _SSE
                         + json.dumps(
                             {
                                 "type": "status",

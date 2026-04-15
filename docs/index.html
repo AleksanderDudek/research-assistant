@@ -245,13 +245,47 @@
     .answer-body hr { border: none; border-top: 1px solid var(--gray-200); margin: 18px 0; }
     .answer-body a { color: var(--blue); }
 
-    /* Reference section gets a distinct background */
+    /* Reference section */
     .answer-body .ref-section {
       background: var(--gray-50); border: 1px solid var(--gray-200);
       border-radius: 8px; padding: 16px 20px; margin-top: 20px; font-size: .88rem;
     }
     .answer-body .ref-section h2,
     .answer-body .ref-section h3 { border: none; font-size: .88rem; color: var(--gray-500); margin: 0 0 10px; }
+
+    /* ── Research process collapsible ── */
+    .research-notes {
+      border-top: 1px solid var(--gray-200); font-size: .88rem;
+    }
+    .research-notes summary {
+      padding: 12px 24px; cursor: pointer; user-select: none;
+      color: var(--blue); font-weight: 600; background: var(--gray-50);
+      display: flex; align-items: center; gap: 7px; list-style: none;
+    }
+    .research-notes summary::-webkit-details-marker { display: none; }
+    .research-notes summary .rn-chevron {
+      display: inline-block; transition: transform .2s; font-style: normal;
+    }
+    .research-notes[open] summary .rn-chevron { transform: rotate(90deg); }
+    .research-notes .notes-body {
+      padding: 16px 24px; background: var(--gray-50);
+      color: var(--gray-700); line-height: 1.7;
+      border-top: 1px solid var(--gray-200);
+    }
+    .research-notes .notes-body ol { padding-left: 20px; }
+    .research-notes .notes-body li { margin-bottom: 4px; }
+
+    /* ── Markdown tables ── */
+    .table-wrap { overflow-x: auto; margin: 16px 0; border-radius: 8px; border: 1px solid var(--gray-200); }
+    .answer-body table { border-collapse: collapse; width: 100%; min-width: 360px; font-size: .9rem; }
+    .answer-body th {
+      background: var(--gray-100); font-weight: 700; color: var(--gray-700);
+      padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--gray-200);
+      white-space: nowrap;
+    }
+    .answer-body td { padding: 9px 14px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
+    .answer-body tr:last-child td { border-bottom: none; }
+    .answer-body tr:nth-child(even) { background: var(--gray-50); }
 
     /* ── Error card ── */
     .error-card {
@@ -632,23 +666,43 @@
       updateProgressStatus(String(msg.text));
     } else if (msg.type === 'done') {
       finishProgress('done');
-      showAnswer(extractAnswer(String(msg.answer)));
+      showAnswer(parseAgentResponse(msg.answer));
     } else if (msg.type === 'error') {
       finishProgress('error');
       showError(String(msg.message));
     }
   }
 
-  // ── Answer extraction ─────────────────────────────────────────────────────
-  // The agent sometimes returns a JSON object; pull the real answer out of it.
-  function extractAnswer(raw) {
+  // ── Agent response parser ─────────────────────────────────────────────────
+  // Handles all known shapes coming from the agent:
+  //   1. Plain markdown string  (ideal path)
+  //   2. ReflectionOutput JSON  { sufficient, reasoning, additional_steps, final_answer }
+  //   3. Raw LLM text           (reflector JSON parse failed; may contain the JSON as text)
+  //   4. Already-parsed object  (msg.answer is an object, not a string)
+  function parseAgentResponse(raw) {
+    // If already a JS object (server sent nested JSON)
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return _buildParsed(raw);
+    }
+    const text = String(raw || '');
+    // Try JSON parse
     try {
-      const obj = JSON.parse(raw);
-      if (obj && typeof obj === 'object') {
-        return String(obj.final_answer || obj.finalanswer || obj.answer || raw);
+      const obj = JSON.parse(text);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        return _buildParsed(obj);
       }
-    } catch { /* not JSON — use as-is */ }
-    return raw;
+    } catch { /* plain string */ }
+    return { finalAnswer: text, reasoning: '', sufficient: true, additionalSteps: [] };
+  }
+
+  function _buildParsed(obj) {
+    const finalAnswer = String(obj.final_answer || obj.finalAnswer || obj.answer || '');
+    return {
+      finalAnswer: finalAnswer || JSON.stringify(obj, null, 2),
+      reasoning:   String(obj.reasoning || ''),
+      sufficient:  obj.sufficient !== false,
+      additionalSteps: Array.isArray(obj.additional_steps) ? obj.additional_steps : [],
+    };
   }
 
   // ── UI helpers ────────────────────────────────────────────────────────────
@@ -670,8 +724,27 @@
       </div>`;
   }
 
-  function showAnswer(text) {
-    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  function showAnswer(parsed) {
+    const { finalAnswer, reasoning, sufficient, additionalSteps } = parsed;
+    const ts  = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Research-process collapsible (shown when we have reasoning from the agent)
+    const notesHtml = reasoning ? `
+      <details class="research-notes">
+        <summary><i class="rn-chevron">&#9658;</i> Research process</summary>
+        <div class="notes-body">${esc(reasoning)}</div>
+      </details>` : '';
+
+    // Additional steps the agent would have taken (shown when budget/replan halted it)
+    const stepPlural = additionalSteps.length === 1 ? '' : 's';
+    const stepsHtml = additionalSteps.length ? `
+      <details class="research-notes">
+        <summary><i class="rn-chevron">&#9658;</i> ${additionalSteps.length} further step${stepPlural} were planned but not executed</summary>
+        <div class="notes-body"><ol>${
+          additionalSteps.map(s => `<li>${esc(String(s.action || s.tool || JSON.stringify(s)))}</li>`).join('')
+        }</ol></div>
+      </details>` : '';
+
     outputEl.innerHTML = `
       <div class="answer-card">
         <div class="answer-toolbar">
@@ -684,11 +757,13 @@
             Answer
           </span>
           <span class="answer-toolbar-meta">
+            ${sufficient ? '' : '<span style="color:var(--amber);font-weight:600;font-size:.78rem">Partial</span>'}
             <span>${ts}</span>
             <button class="btn btn-ghost" id="copy-btn" onclick="copyAnswer()">Copy</button>
           </span>
         </div>
-        <div class="answer-body" id="answer-body">${renderMarkdown(text)}</div>
+        <div class="answer-body" id="answer-body">${renderMarkdown(finalAnswer)}</div>
+        ${notesHtml}${stepsHtml}
       </div>`;
   }
 
@@ -714,22 +789,61 @@
     const text  = raw.replaceAll('\\n', '\n');   // normalise escaped newlines
     const lines = text.split('\n');
     const out   = [];
-    const state = { listType: null, inPre: false, inRef: false };
+    const state = { listType: null, inPre: false, inRef: false, inTable: false, tableRowCount: 0 };
     for (const line of lines) renderLine(line, out, state);
     closeState(out, state);
     return out.join('');
   }
 
-  function closeState(out, state) {
+  function _closeList(out, state) {
     if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
-    if (state.inRef)    { out.push('</div>');               state.inRef = false; }
-    if (state.inPre)    { out.push('</code></pre>');        state.inPre = false; }
+  }
+
+  function _handleTableRow(cells, out, state) {
+    // Separator row (e.g. |---|:---:|) — marks end of header
+    if (state.inTable && state.tableRowCount === 1 && cells.every(c => /^:?-+:?$/.test(c))) {
+      state.tableRowCount = 2;
+      return;
+    }
+    if (state.inTable) {
+      out.push('<tr>');
+      cells.forEach(c => out.push(`<td>${inl(c)}</td>`));
+      out.push('</tr>');
+      state.tableRowCount++;
+    } else {
+      state.inTable = true;
+      state.tableRowCount = 1;
+      out.push('<div class="table-wrap"><table><thead><tr>');
+      cells.forEach(c => out.push(`<th>${inl(c)}</th>`));
+      out.push('</tr></thead><tbody>');
+    }
+  }
+
+  function _handleList(trim, out, state) {
+    if (/^[-*+] /.test(trim)) {
+      if (state.listType !== 'ul') { _closeList(out, state); out.push('<ul>'); state.listType = 'ul'; }
+      out.push(`<li>${inl(trim.slice(2))}</li>`);
+      return true;
+    }
+    if (/^\d+\. /.test(trim)) {
+      if (state.listType !== 'ol') { _closeList(out, state); out.push('<ol>'); state.listType = 'ol'; }
+      out.push(`<li>${inl(trim.replace(/^\d+\. /, ''))}</li>`);
+      return true;
+    }
+    return false;
+  }
+
+  function closeState(out, state) {
+    _closeList(out, state);
+    if (state.inTable)  { out.push('</tbody></table></div>'); state.inTable = false; state.tableRowCount = 0; }
+    if (state.inRef)    { out.push('</div>');                 state.inRef = false; }
+    if (state.inPre)    { out.push('</code></pre>');          state.inPre = false; }
   }
 
   function renderLine(line, out, state) {
     const trim = line.trim();
     if (trim.startsWith('```')) {
-      if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
+      _closeList(out, state);
       if (state.inPre)    { out.push('</code></pre>'); state.inPre = false; }
       else                { out.push('<pre><code>');   state.inPre = true;  }
       return;
@@ -743,39 +857,37 @@
   }
 
   function renderNormalLine(trim, out, state) {
-    const closeList = () => {
-      if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
-    };
-
     if (!state.inRef && isRefHeading(trim)) {
-      closeList();
+      _closeList(out, state);
       state.inRef = true;
       out.push('<div class="ref-section">');
     }
 
+    // Table rows  |col|col|…
+    if (trim.startsWith('|') && trim.endsWith('|')) {
+      _closeList(out, state);
+      _handleTableRow(trim.split('|').slice(1, -1).map(c => c.trim()), out, state);
+      return;
+    }
+    // Close table when a non-table line is encountered
+    if (state.inTable) {
+      out.push('</tbody></table></div>');
+      state.inTable = false;
+      state.tableRowCount = 0;
+    }
+
     // Headings — match raw text (# not affected by esc)
-    if (trim.startsWith('#### ')) { closeList(); out.push(`<h4>${inl(trim.slice(5))}</h4>`); return; }
-    if (trim.startsWith('### '))  { closeList(); out.push(`<h3>${inl(trim.slice(4))}</h3>`); return; }
-    if (trim.startsWith('## '))   { closeList(); out.push(`<h2>${inl(trim.slice(3))}</h2>`); return; }
-    if (trim.startsWith('# '))    { closeList(); out.push(`<h2>${inl(trim.slice(2))}</h2>`); return; }
+    if (trim.startsWith('#### ')) { _closeList(out, state); out.push(`<h4>${inl(trim.slice(5))}</h4>`); return; }
+    if (trim.startsWith('### '))  { _closeList(out, state); out.push(`<h3>${inl(trim.slice(4))}</h3>`); return; }
+    if (trim.startsWith('## '))   { _closeList(out, state); out.push(`<h2>${inl(trim.slice(3))}</h2>`); return; }
+    if (trim.startsWith('# '))    { _closeList(out, state); out.push(`<h2>${inl(trim.slice(2))}</h2>`); return; }
 
     // Blockquote — use raw > (not &gt;) because we haven't called esc yet
-    if (trim.startsWith('> '))    { closeList(); out.push(`<blockquote><p>${inl(trim.slice(2))}</p></blockquote>`); return; }
+    if (trim.startsWith('> '))    { _closeList(out, state); out.push(`<blockquote><p>${inl(trim.slice(2))}</p></blockquote>`); return; }
 
-    // Unordered list
-    if (/^[-*+] /.test(trim)) {
-      if (state.listType !== 'ul') { closeList(); out.push('<ul>'); state.listType = 'ul'; }
-      out.push(`<li>${inl(trim.slice(2))}</li>`);
-      return;
-    }
-    // Ordered list
-    if (/^\d+\. /.test(trim)) {
-      if (state.listType !== 'ol') { closeList(); out.push('<ol>'); state.listType = 'ol'; }
-      out.push(`<li>${inl(trim.replace(/^\d+\. /, ''))}</li>`);
-      return;
-    }
+    if (_handleList(trim, out, state)) return;
 
-    closeList();
+    _closeList(out, state);
     if (/^[-_*]{3,}$/.test(trim)) { out.push('<hr>'); return; }
     if (trim !== '') out.push(`<p>${inl(trim)}</p>`);
   }

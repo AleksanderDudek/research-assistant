@@ -292,7 +292,7 @@
   <div class="banner banner-amber">
     <span class="banner-icon">&#9432;</span>
     <span>
-      <strong>Free tier &mdash; 3 requests per day, 60&thinsp;min cooldown between each.</strong>
+      <strong>Free tier &mdash; 3 requests per day, 60&thinsp;sec cooldown between each.</strong>
       Research takes 1&ndash;3 minutes. The assistant searches the web, reads documents,
       and reasons over sources before answering.
     </span>
@@ -376,7 +376,7 @@
   const MAX_CHARS      = 2000;
   const MAX_WAIT_MS    = 4 * 60 * 1000;
   const DAILY_LIMIT    = 3;
-  const COOLDOWN_MS    = 60 * 60 * 1000;   // 60 minutes
+  const COOLDOWN_MS    = 60 * 1000;         // 60 seconds
   const STORAGE_KEY    = 'ra_usage_v1';
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
@@ -585,6 +585,11 @@
       }
       if (resp.body) {
         await readStream(resp.body);
+        // Guard: stream closed without a done/error event
+        if (!outputEl.innerHTML) {
+          finishProgress('error');
+          showError('The session ended without a result. The server may have timed out — please try again.');
+        }
       } else {
         finishProgress('error');
         showError('Your browser does not support streaming responses.');
@@ -699,10 +704,13 @@
   }
 
   // ── Markdown renderer ─────────────────────────────────────────────────────
+  // Strategy: split on raw lines FIRST (so structural patterns like > and #
+  // are matched before escaping), then esc() only the text fragments we
+  // inject into HTML, so & < > " are always safe.
+
   function renderMarkdown(raw) {
-    // Normalise literal \n sequences (agent may return them as escaped strings)
-    const text  = raw.replaceAll('\\n', '\n');
-    const lines = esc(text).split('\n');
+    const text  = raw.replaceAll('\\n', '\n');   // normalise escaped newlines
+    const lines = text.split('\n');
     const out   = [];
     const state = { listType: null, inPre: false, inRef: false };
     for (const line of lines) renderLine(line, out, state);
@@ -712,8 +720,8 @@
 
   function closeState(out, state) {
     if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
-    if (state.inRef)    { out.push('</div>'); state.inRef = false; }
-    if (state.inPre)    { out.push('</code></pre>'); state.inPre = false; }
+    if (state.inRef)    { out.push('</div>');               state.inRef = false; }
+    if (state.inPre)    { out.push('</code></pre>');        state.inPre = false; }
   }
 
   function renderLine(line, out, state) {
@@ -724,11 +732,10 @@
       else                { out.push('<pre><code>');   state.inPre = true;  }
       return;
     }
-    if (state.inPre) { out.push(line + '\n'); return; }
+    if (state.inPre) { out.push(esc(line) + '\n'); return; }
     renderNormalLine(trim, out, state);
   }
 
-  // Detect "References" / "Sources" heading to wrap in a styled block
   function isRefHeading(t) {
     return /^#{1,3}\s*(references|sources|citations|footnotes)/i.test(t);
   }
@@ -738,27 +745,31 @@
       if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
     };
 
-    // Open ref section
     if (!state.inRef && isRefHeading(trim)) {
       closeList();
       state.inRef = true;
       out.push('<div class="ref-section">');
     }
 
+    // Headings — match raw text (# not affected by esc)
     if (trim.startsWith('#### ')) { closeList(); out.push(`<h4>${inl(trim.slice(5))}</h4>`); return; }
     if (trim.startsWith('### '))  { closeList(); out.push(`<h3>${inl(trim.slice(4))}</h3>`); return; }
     if (trim.startsWith('## '))   { closeList(); out.push(`<h2>${inl(trim.slice(3))}</h2>`); return; }
     if (trim.startsWith('# '))    { closeList(); out.push(`<h2>${inl(trim.slice(2))}</h2>`); return; }
-    if (trim.startsWith('&gt; ')) { closeList(); out.push(`<blockquote><p>${inl(trim.slice(5))}</p></blockquote>`); return; }
 
-    if (/^[-*] /.test(trim)) {
+    // Blockquote — use raw > (not &gt;) because we haven't called esc yet
+    if (trim.startsWith('> '))    { closeList(); out.push(`<blockquote><p>${inl(trim.slice(2))}</p></blockquote>`); return; }
+
+    // Unordered list
+    if (/^[-*+] /.test(trim)) {
       if (state.listType !== 'ul') { closeList(); out.push('<ul>'); state.listType = 'ul'; }
       out.push(`<li>${inl(trim.slice(2))}</li>`);
       return;
     }
+    // Ordered list
     if (/^\d+\. /.test(trim)) {
       if (state.listType !== 'ol') { closeList(); out.push('<ol>'); state.listType = 'ol'; }
-      out.push(`<li>${inl(trim.replaceAll(/^\d+\. /g, ''))}</li>`);
+      out.push(`<li>${inl(trim.replace(/^\d+\. /, ''))}</li>`);
       return;
     }
 
@@ -767,18 +778,39 @@
     if (trim !== '') out.push(`<p>${inl(trim)}</p>`);
   }
 
-  function inl(s) {
-    s = s.replaceAll(/\*\*(.+?)\*\*/g,  '<strong>$1</strong>');
-    s = s.replaceAll(/__(.+?)__/g,      '<strong>$1</strong>');
-    s = s.replaceAll(/\*([^*\n]+?)\*/g, '<em>$1</em>');
-    s = s.replaceAll(/_([^_\n]+?)_/g,   '<em>$1</em>');
-    s = s.replaceAll(/`([^`\n]+?)`/g,   '<code>$1</code>');
-    // Linkify URLs that survived escaping (escaped as &lt; ... &gt; or plain text)
-    s = s.replaceAll(
-      /https?:[^\s<>"']+/g,
-      u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`
+  // inl() receives RAW (unescaped) text.
+  // Order matters: links first, then bold/italic/code, then esc remaining text, then bare URLs.
+  // \uFFFD (Unicode replacement character) is used as a token sentinel —
+  // it never appears in agent output and is not a control character.
+  function inl(raw) {
+    const parts = [];
+    let rest = raw;
+
+    // Stash markdown links [text](url) before escaping so & in URLs is preserved
+    rest = rest.replaceAll(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_, text, url) => {
+      parts.push(`<a href="${url.replaceAll('"', '%22')}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>`);
+      return `\uFFFD${parts.length - 1}\uFFFD`;
+    });
+
+    // Stash inline code `...` before escaping
+    rest = rest.replaceAll(/`([^`\n]+?)`/g, (_, code) => {
+      parts.push(`<code>${esc(code)}</code>`);
+      return `\uFFFD${parts.length - 1}\uFFFD`;
+    });
+
+    // Escape remaining text, then apply bold / italic / bare-URL
+    rest = esc(rest);
+    rest = rest.replaceAll(/\*\*(.+?)\*\*/g,  '<strong>$1</strong>');
+    rest = rest.replaceAll(/__(.+?)__/g,       '<strong>$1</strong>');
+    rest = rest.replaceAll(/\*([^*\n]+?)\*/g,  '<em>$1</em>');
+    rest = rest.replaceAll(/_([^_\n]+?)_/g,    '<em>$1</em>');
+    // Bare URLs — &amp; in href must be unescaped, keep in display text
+    rest = rest.replaceAll(/https?:[^\s<>"']+/g, u =>
+      `<a href="${u.replaceAll('&amp;', '&')}" target="_blank" rel="noopener noreferrer">${u}</a>`
     );
-    return s;
+
+    // Restore stashed tokens
+    return rest.replaceAll(/\uFFFD(\d+)\uFFFD/g, (_, i) => parts[Number(i)]);
   }
 
   function esc(s) {

@@ -41,7 +41,7 @@ def _get_ip(request: Request) -> str:
 
 
 _MAX_DAILY = 3
-_COOLDOWN_SECS = 3600
+_COOLDOWN_SECS = 60
 
 
 def _check_and_record(ip: str) -> tuple[bool, str]:
@@ -298,7 +298,7 @@ _HTML = """\
 # ---------------------------------------------------------------------------
 
 
-async def homepage(request: Request) -> HTMLResponse:
+def homepage(request: Request) -> HTMLResponse:
     return HTMLResponse(_HTML, headers=_SECURITY_HEADERS)
 
 

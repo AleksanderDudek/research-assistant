@@ -40,8 +40,8 @@ def _get_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-_MAX_DAILY = 3
-_COOLDOWN_SECS = 60
+_MAX_DAILY = 999
+_COOLDOWN_SECS = 0
 
 
 def _check_and_record(ip: str) -> tuple[bool, str]:

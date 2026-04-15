@@ -292,7 +292,6 @@
   <div class="banner banner-amber">
     <span class="banner-icon">&#9432;</span>
     <span>
-      <strong>Free tier &mdash; 3 requests per day, 60&thinsp;sec cooldown between each.</strong>
       Research takes 1&ndash;3 minutes. The assistant searches the web, reads documents,
       and reasons over sources before answering.
     </span>
@@ -325,14 +324,13 @@
       <span class="char-count" id="char-count">0&thinsp;/&thinsp;2000</span>
     </div>
 
-    <!-- Per-browser quota status -->
-    <div class="usage-row" id="usage-row">
+    <div class="usage-row" id="usage-row" hidden>
       <div class="quota-dots" id="quota-dots">
         <div class="qdot" id="qdot-0"></div>
         <div class="qdot" id="qdot-1"></div>
         <div class="qdot" id="qdot-2"></div>
       </div>
-      <span id="usage-label">3 requests remaining today</span>
+      <span id="usage-label"></span>
       <span id="usage-cooldown"></span>
     </div>
   </div>
@@ -375,8 +373,8 @@
   // ── Constants ─────────────────────────────────────────────────────────────
   const MAX_CHARS      = 2000;
   const MAX_WAIT_MS    = 4 * 60 * 1000;
-  const DAILY_LIMIT    = 3;
-  const COOLDOWN_MS    = 60 * 1000;         // 60 seconds
+  const DAILY_LIMIT    = 999;
+  const COOLDOWN_MS    = 0;
   const STORAGE_KEY    = 'ra_usage_v1';
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
@@ -585,10 +583,9 @@
       }
       if (resp.body) {
         await readStream(resp.body);
-        // Guard: stream closed without a done/error event
         if (!outputEl.innerHTML) {
           finishProgress('error');
-          showError('The session ended without a result. The server may have timed out — please try again.');
+          showError('The session ended without a result. Please try again.');
         }
       } else {
         finishProgress('error');
@@ -597,10 +594,15 @@
     } catch (err) {
       clearTimeout(timeoutId);
       finishProgress('error');
-      const isTimeout = err instanceof DOMException && err.name === 'AbortError';
-      showError(isTimeout
-        ? 'Request timed out after 4 minutes. Please try again.'
-        : 'Connection to the server was interrupted. Please try again.');
+      // Only show error if we haven't already rendered an answer.
+      // ERR_INCOMPLETE_CHUNKED_ENCODING often fires *after* the done event
+      // is received, so the answer may already be on screen.
+      if (!outputEl.innerHTML) {
+        const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+        showError(isTimeout
+          ? 'Request timed out after 4 minutes. Please try again.'
+          : 'Connection to the server was interrupted. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

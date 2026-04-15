@@ -270,7 +270,15 @@ _HTML = """\
 
 
 async def homepage(request: Request) -> HTMLResponse:
-    return HTMLResponse(_HTML)
+    return HTMLResponse(_HTML, headers=_SECURITY_HEADERS)
+
+
+_MAX_QUESTION = 2000
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
 
 
 async def run_research(request: Request) -> Response:
@@ -278,10 +286,13 @@ async def run_research(request: Request) -> Response:
         body = await request.json()
         question = str(body.get("question", "")).strip()
     except Exception:
-        return Response("Invalid JSON", status_code=400)
+        return Response("Invalid request", status_code=400)
 
     if not question:
         return Response("Question is required", status_code=400)
+
+    if len(question) > _MAX_QUESTION:
+        return Response(f"Question too long (max {_MAX_QUESTION} characters)", status_code=400)
 
     ip = _get_ip(request)
 
@@ -316,7 +327,13 @@ async def run_research(request: Request) -> Response:
                 record = await Agent().run(question=question, budget=Budget(limit_usd=2.00))
                 await queue.put({"type": "done", "answer": record.final_answer or "(no answer)"})
             except Exception as exc:
-                await queue.put({"type": "error", "message": str(exc)})
+                log.exception("agent.run_error", error=str(exc))
+                await queue.put(
+                    {
+                        "type": "error",
+                        "message": "Research failed due to an internal error. Please try again.",
+                    }
+                )
 
         task = asyncio.create_task(_run())
         tick = 0
@@ -344,7 +361,11 @@ async def run_research(request: Request) -> Response:
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            **_SECURITY_HEADERS,
+        },
     )
 
 

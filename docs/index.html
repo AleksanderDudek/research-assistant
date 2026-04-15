@@ -1,222 +1,670 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Research Assistant</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: system-ui, -apple-system, sans-serif;
-    background: #f7f8fa;
-    color: #1a1a2e;
-    min-height: 100vh;
-  }
-  .container { max-width: 780px; margin: 48px auto; padding: 0 20px 60px; }
-  h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.5px; }
-  .sub  { color: #666; margin: 6px 0 28px; font-size: 0.95rem; }
-  .notice {
-    background: #fffbe6;
-    border: 1px solid #ffe58f;
-    border-radius: 8px;
-    padding: 11px 16px;
-    margin-bottom: 22px;
-    font-size: 0.88rem;
-    color: #5c4a00;
-  }
-  .notice strong { color: #3a2e00; }
-  .cfg-banner {
-    background: #fff0f0;
-    border: 1px solid #fc8181;
-    border-radius: 8px;
-    padding: 11px 16px;
-    margin-bottom: 22px;
-    font-size: 0.88rem;
-    color: #c53030;
-    display: none;
-  }
-  textarea {
-    width: 100%;
-    min-height: 96px;
-    padding: 12px 14px;
-    border: 1px solid #d0d5dd;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-family: inherit;
-    resize: vertical;
-    outline: none;
-    transition: border-color .15s;
-  }
-  textarea:focus { border-color: #0070f3; }
-  .row { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
-  button {
-    padding: 10px 26px;
-    background: #0070f3;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background .15s;
-    white-space: nowrap;
-  }
-  button:hover:not(:disabled) { background: #005ad4; }
-  button:disabled { background: #aaa; cursor: not-allowed; }
-  #hint { font-size: 0.82rem; color: #888; }
-  #output { margin-top: 30px; }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #555;
-    font-size: 0.95rem;
-  }
-  .spinner {
-    width: 18px; height: 18px;
-    border: 2px solid #ccc;
-    border-top-color: #0070f3;
-    border-radius: 50%;
-    animation: spin .75s linear infinite;
-    flex-shrink: 0;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .answer {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    padding: 22px 24px;
-    white-space: pre-wrap;
-    line-height: 1.7;
-    font-size: 0.97rem;
-  }
-  .error {
-    background: #fff5f5;
-    border-color: #fc8181;
-    color: #c53030;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="AI-powered research assistant using Claude and real-time web search, PDF reading, and Python execution.">
+  <meta property="og:title" content="Research Assistant">
+  <meta property="og:description"
+    content="Ask any research question. Claude searches the web, reads documents, and reasons to produce a comprehensive answer.">
+  <meta property="og:type" content="website">
+  <!-- Inline SVG favicon — no external request needed -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F9EA;</text></svg>">
+  <title>Research Assistant</title>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens ── */
+    :root {
+      --blue:      #2563eb;
+      --blue-dark: #1d4ed8;
+      --blue-dim:  rgba(37,99,235,.12);
+      --red:       #dc2626;
+      --amber:     #b45309;
+      --amber-bg:  #fffbeb;
+      --amber-br:  #fcd34d;
+      --green:     #15803d;
+      --green-bg:  #f0fdf4;
+      --green-br:  #86efac;
+      --gray-50:   #f8fafc;
+      --gray-100:  #f1f5f9;
+      --gray-200:  #e2e8f0;
+      --gray-400:  #94a3b8;
+      --gray-500:  #64748b;
+      --gray-700:  #334155;
+      --gray-900:  #0f172a;
+      --radius:    10px;
+      --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    }
+
+    /* ── Base ── */
+    html { font-size: 16px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font-family: ui-monospace, "Cascadia Code", "Fira Mono", monospace;
+      font-size: .85em;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+
+    /* ── Layout ── */
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 0 24px;
+    }
+    .header-inner {
+      max-width: 720px;
+      margin: 0 auto;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--gray-900);
+    }
+    .logo-icon { font-size: 1.3rem; }
+    .badge {
+      font-size: .72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      background: var(--gray-100);
+      color: var(--gray-500);
+      border: 1px solid var(--gray-200);
+      border-radius: 20px;
+      padding: 2px 9px;
+    }
+
+    main {
+      flex: 1;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: .82rem;
+      color: var(--gray-400);
+      border-top: 1px solid var(--gray-200);
+      background: #fff;
+    }
+    footer a { color: var(--gray-500); }
+
+    /* ── Banners ── */
+    .banner {
+      border-radius: var(--radius);
+      padding: 11px 16px;
+      margin-bottom: 18px;
+      font-size: .88rem;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      line-height: 1.5;
+    }
+    .banner-icon { flex-shrink: 0; margin-top: 1px; }
+    .banner-amber {
+      background: var(--amber-bg);
+      border: 1px solid var(--amber-br);
+      color: var(--amber);
+    }
+    .banner-red {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: var(--red);
+    }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Form ── */
+    .field-label {
+      display: block;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    textarea {
+      width: 100%;
+      min-height: 108px;
+      padding: 12px 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: .97rem;
+      font-family: inherit;
+      color: var(--gray-900);
+      background: #fff;
+      resize: vertical;
+      transition: border-color .15s, box-shadow .15s;
+      line-height: 1.6;
+    }
+    textarea::placeholder { color: var(--gray-400); }
+    textarea:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-dim);
+    }
+    .form-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      gap: 12px;
+    }
+    .form-actions { display: flex; gap: 8px; align-items: center; }
+    .char-count {
+      font-size: .8rem;
+      color: var(--gray-400);
+      white-space: nowrap;
+    }
+    .char-count.warn { color: var(--red); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 20px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--blue-dark);
+      transform: translateY(-1px);
+    }
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { background: var(--gray-400); cursor: not-allowed; transform: none; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--gray-500);
+      border: 1px solid var(--gray-200);
+      padding: 7px 14px;
+      font-size: .85rem;
+      font-weight: 500;
+    }
+    .btn-ghost:hover:not(:disabled) {
+      background: var(--gray-100);
+      transform: none;
+    }
+    .shortcut {
+      font-size: .75rem;
+      color: var(--gray-400);
+    }
+
+    /* ── Status / Output ── */
+    #output { margin-top: 4px; }
+
+    .status-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid var(--gray-200);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-text { color: var(--gray-500); font-size: .95rem; }
+
+    .answer-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .answer-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-200);
+      font-size: .8rem;
+      color: var(--gray-500);
+    }
+    .answer-toolbar strong { color: var(--gray-700); }
+    .answer-body {
+      padding: 24px;
+      line-height: 1.75;
+      font-size: .97rem;
+      color: var(--gray-900);
+    }
+
+    /* ── Markdown rendering ── */
+    .answer-body h2 {
+      font-size: 1.15rem; font-weight: 700;
+      margin: 20px 0 8px; color: var(--gray-900);
+    }
+    .answer-body h3 {
+      font-size: 1rem; font-weight: 700;
+      margin: 16px 0 6px; color: var(--gray-900);
+    }
+    .answer-body h4 {
+      font-size: .95rem; font-weight: 700;
+      margin: 14px 0 4px; color: var(--gray-700);
+    }
+    .answer-body p { margin-bottom: 12px; }
+    .answer-body p:last-child { margin-bottom: 0; }
+    .answer-body ul, .answer-body ol {
+      padding-left: 22px;
+      margin: 8px 0 12px;
+    }
+    .answer-body li { margin-bottom: 4px; }
+    .answer-body strong { font-weight: 700; }
+    .answer-body em { font-style: italic; }
+    .answer-body code {
+      font-size: .85em;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .answer-body pre {
+      background: var(--gray-900);
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      margin: 12px 0;
+      font-size: .88rem;
+    }
+    .answer-body pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+    .answer-body blockquote {
+      border-left: 3px solid var(--blue);
+      padding: 2px 0 2px 14px;
+      margin: 10px 0;
+      color: var(--gray-500);
+    }
+
+    .error-card {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      color: var(--red);
+      font-size: .93rem;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      margin-top: 18px;
+      font-size: .8rem;
+      color: var(--gray-400);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* ── Copy feedback ── */
+    .copied { color: var(--green) !important; }
+
+    /* ── Responsive ── */
+    @media (max-width: 520px) {
+      main { padding: 20px 16px 40px; }
+      .card { padding: 18px; }
+      .form-footer { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .shortcut { display: none; }
+    }
+  </style>
 </head>
 <body>
-<div class="container">
-  <h1>Research Assistant</h1>
-  <p class="sub">Powered by Claude &amp; MCP research tools</p>
 
-  <div class="notice">
-    &#9432;&nbsp; <strong>Free tier:</strong> 1 research request per day per IP address.
-    Results may take 1&ndash;3 minutes.
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">&#x1F9EA;</span>
+      Research Assistant
+    </div>
+    <span class="badge">Beta</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Rate-limit notice -->
+  <div class="banner banner-amber">
+    <span class="banner-icon">&#9432;</span>
+    <span>
+      <strong>Free tier &mdash; 1 request per day per IP address.</strong>
+      Research runs take 1&ndash;3 minutes. The assistant searches the web, reads
+      documents, and reasons over sources before answering.
+    </span>
   </div>
 
-  <div class="cfg-banner" id="cfg-banner">
-    &#9888;&nbsp; <strong>Not configured:</strong>
-    Set <code>BACKEND_URL</code> in <code>docs/index.html</code> to your server address.
+  <!-- Config error (shown only when BACKEND_URL is not set on GitHub Pages) -->
+  <div class="banner banner-red" id="cfg-banner" style="display:none">
+    <span class="banner-icon">&#9888;</span>
+    <span>
+      Backend not configured.
+      Set <code>BACKEND_URL</code> in <code>docs/index.html</code> to your server address.
+    </span>
   </div>
 
-  <form id="form">
+  <div class="card">
+    <label class="field-label" for="question">Research question</label>
     <textarea
       id="question"
-      placeholder="Ask a research question, e.g. &#8220;Latest advances in fusion energy?&#8221;"
+      maxlength="2000"
+      placeholder="e.g. What are the latest breakthroughs in solid-state batteries and their commercial timeline?"
       required
     ></textarea>
-    <div class="row">
-      <button type="submit" id="btn">Research</button>
-      <span id="hint"></span>
+    <div class="form-footer">
+      <div class="form-actions">
+        <button type="button" id="btn" onclick="submitQuestion()">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M9 4a1 1 0 0 1 2 0v7.586l2.293-2.293a1 1 0 1 1
+              1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1
+              1.414-1.414L9 11.586V4z"/>
+          </svg>
+          <span id="btn-label">Research</span>
+        </button>
+        <span class="shortcut" id="shortcut-hint">&#8984;&#x23CE; to submit</span>
+      </div>
+      <span class="char-count" id="char-count">0&thinsp;/&thinsp;2000</span>
     </div>
-  </form>
+  </div>
 
   <div id="output"></div>
-</div>
+
+  <p class="disclaimer">
+    AI-generated content may contain inaccuracies. Always verify important findings
+    from primary sources. &mdash;
+    <a href="https://github.com/AleksanderDudek/research-assistant" target="_blank" rel="noopener">
+      View source
+    </a>
+  </p>
+
+</main>
+
+<footer>
+  Powered by <a href="https://www.anthropic.com/claude" target="_blank" rel="noopener">Claude</a>
+  &middot; MCP research tools &middot; hosted on
+  <a href="https://pages.github.com" target="_blank" rel="noopener">GitHub Pages</a>
+</footer>
 
 <script>
-  // ── Configuration ──────────────────────────────────────────────────────────
-  // Set this to the HTTPS address of your server, e.g.:
-  //   const BACKEND_URL = 'https://research.example.com';
-  // Leave empty only when this page is served directly from the same server.
-  const BACKEND_URL = '';
+  // ── Configuration ────────────────────────────────────────────────────────
+  // Update this to your server's HTTPS address whenever the tunnel URL changes.
+  const BACKEND_URL = 'https://allie-alone-vatican-readers.trycloudflare.com';
 
-  // ── Setup ──────────────────────────────────────────────────────────────────
-  const form = document.getElementById('form');
-  const btn  = document.getElementById('btn');
-  const hint = document.getElementById('hint');
-  const out  = document.getElementById('output');
+  // ── Constants ────────────────────────────────────────────────────────────
+  const MAX_CHARS   = 2000;
+  const MAX_WAIT_MS = 4 * 60 * 1000; // 4-minute client-side safety timeout
 
-  // Show warning banner if page is on GitHub Pages but BACKEND_URL is not set
-  const isGitHubPages = window.location.hostname.endsWith('github.io');
-  if (isGitHubPages && !BACKEND_URL) {
-    document.getElementById('cfg-banner').style.display = 'block';
-    btn.disabled = true;
-    hint.textContent = 'Configure BACKEND_URL to enable.';
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  const qEl        = document.getElementById('question');
+  const btnEl      = document.getElementById('btn');
+  const btnLabel   = document.getElementById('btn-label');
+  const charCount  = document.getElementById('char-count');
+  const outputEl   = document.getElementById('output');
+  const cfgBanner  = document.getElementById('cfg-banner');
+  const shortcut   = document.getElementById('shortcut-hint');
+
+  // ── Startup checks ───────────────────────────────────────────────────────
+  const isMac          = /Mac/.test(navigator.platform);
+  shortcut.textContent = isMac ? '⌘↵ to submit' : 'Ctrl+↵ to submit';
+
+  if (globalThis.location.hostname.endsWith('github.io') && !BACKEND_URL) {
+    cfgBanner.style.display = 'flex';
+    btnEl.disabled          = true;
   }
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const question = document.getElementById('question').value.trim();
-    if (!question) return;
+  // ── Character counter ────────────────────────────────────────────────────
+  qEl.addEventListener('input', () => {
+    const n = qEl.value.length;
+    charCount.textContent = `${n}\u202f/\u202f${MAX_CHARS}`;
+    charCount.classList.toggle('warn', n > MAX_CHARS * 0.9);
+  });
 
-    btn.disabled = true;
-    btn.textContent = 'Researching\u2026';
-    hint.textContent = '';
-    out.innerHTML = '<div class="status">'
-      + '<div class="spinner"></div>'
-      + '<span id="stxt">Starting\u2026</span></div>';
-
-    try {
-      const resp = await fetch(BACKEND_URL + '/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
-      });
-
-      if (!resp.body) {
-        showError('Browser does not support streaming responses.');
-        return;
-      }
-
-      const reader  = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let   buffer  = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          if (line.startsWith('data: ')) handleEvent(line.slice(6));
-        }
-      }
-    } catch (err) {
-      showError('Network error: ' + String(err));
-    } finally {
-      btn.disabled   = false;
-      btn.textContent = 'Research';
+  // ── Keyboard shortcut ────────────────────────────────────────────────────
+  qEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      submitQuestion();
     }
   });
 
+  // ── Submit ───────────────────────────────────────────────────────────────
+  async function submitQuestion() {
+    const question = qEl.value.trim();
+    if (!question || btnEl.disabled) return;
+
+    setLoading(true, 'Starting\u2026');
+
+    const ctrl     = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), MAX_WAIT_MS);
+    try {
+      const resp = await fetch(BACKEND_URL + '/run', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ question }),
+        signal:  ctrl.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        showError(await resp.text().catch(() => `HTTP ${resp.status}`));
+        return;
+      }
+      if (resp.body) {
+        await readStream(resp.body);
+      } else {
+        showError('Your browser does not support streaming responses.');
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+      showError(isTimeout
+        ? 'Request timed out after 4 minutes. Please try again.'
+        : 'Could not reach the server. It may be restarting — please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function readStream(body) {
+    const reader  = body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.startsWith('data: ')) handleEvent(line.slice(6));
+      }
+    }
+  }
+
+  // ── Event handling ───────────────────────────────────────────────────────
   function handleEvent(raw) {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
-
     if (msg.type === 'status') {
-      const el = document.getElementById('stxt');
+      const el = outputEl.querySelector('.status-text');
       if (el) el.textContent = msg.text;
     } else if (msg.type === 'done') {
-      out.innerHTML = '<div class="answer">' + esc(msg.answer) + '</div>';
+      showAnswer(String(msg.answer));
     } else if (msg.type === 'error') {
-      showError(msg.message);
+      showError(String(msg.message));
+    }
+  }
+
+  // ── UI helpers ───────────────────────────────────────────────────────────
+  function setLoading(on, statusText) {
+    btnEl.disabled       = on;
+    btnLabel.textContent = on ? 'Researching\u2026' : 'Research';
+    if (on) {
+      outputEl.innerHTML = `
+        <div class="status-card">
+          <div class="spinner"></div>
+          <span class="status-text">${esc(statusText)}</span>
+        </div>`;
     }
   }
 
   function showError(msg) {
-    out.innerHTML = '<div class="answer error">' + esc(msg) + '</div>';
+    outputEl.innerHTML = `
+      <div class="error-card">
+        <span style="flex-shrink:0">&#9888;</span>
+        <span>${esc(msg)}</span>
+      </div>`;
+  }
+
+  function showAnswer(text) {
+    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    outputEl.innerHTML = `
+      <div class="answer-card">
+        <div class="answer-toolbar">
+          <strong>Answer</strong>
+          <span>Generated at ${ts} &nbsp;&middot;&nbsp;
+            <button class="btn btn-ghost" id="copy-btn" onclick="copyAnswer()">Copy</button>
+          </span>
+        </div>
+        <div class="answer-body" id="answer-body">${renderMarkdown(text)}</div>
+      </div>`;
+  }
+
+  function copyAnswer() {
+    const body = document.getElementById('answer-body');
+    if (body) {
+      navigator.clipboard.writeText(body.innerText).then(() => {
+        const btn = document.getElementById('copy-btn');
+        if (!btn) return;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+  }
+
+  // ── Markdown renderer ────────────────────────────────────────────────────
+  // HTML-escapes first, then applies a safe Markdown subset.
+  // Complexity is split across three functions to stay readable.
+
+  function renderMarkdown(raw) {
+    const lines = esc(raw).split('\n');
+    const out   = [];
+    const state = { listType: null, inPre: false };
+    for (const line of lines) {
+      renderLine(line, out, state);
+    }
+    if (state.listType) out.push(`</${state.listType}>`);
+    if (state.inPre)    out.push('</code></pre>');
+    return out.join('');
+  }
+
+  function renderLine(line, out, state) {
+    const trim = line.trim();
+    if (trim.startsWith('```')) {
+      if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
+      if (state.inPre) { out.push('</code></pre>'); state.inPre = false; }
+      else             { out.push('<pre><code>');   state.inPre = true;  }
+      return;
+    }
+    if (state.inPre) { out.push(line + '\n'); return; }
+    renderNormalLine(trim, out, state);
+  }
+
+  function renderNormalLine(trim, out, state) {
+    const closeList = () => {
+      if (state.listType) { out.push(`</${state.listType}>`); state.listType = null; }
+    };
+    if (trim.startsWith('#### ')) { closeList(); out.push(`<h4>${inl(trim.slice(5))}</h4>`); return; }
+    if (trim.startsWith('### '))  { closeList(); out.push(`<h3>${inl(trim.slice(4))}</h3>`); return; }
+    if (trim.startsWith('## '))   { closeList(); out.push(`<h2>${inl(trim.slice(3))}</h2>`); return; }
+    if (trim.startsWith('# '))    { closeList(); out.push(`<h2>${inl(trim.slice(2))}</h2>`); return; }
+    if (trim.startsWith('&gt; ')) { closeList(); out.push(`<blockquote><p>${inl(trim.slice(5))}</p></blockquote>`); return; }
+    if (/^[-*] /.test(trim)) {
+      if (state.listType !== 'ul') { closeList(); out.push('<ul>'); state.listType = 'ul'; }
+      out.push(`<li>${inl(trim.slice(2))}</li>`);
+      return;
+    }
+    if (/^\d+\. /.test(trim)) {
+      if (state.listType !== 'ol') { closeList(); out.push('<ol>'); state.listType = 'ol'; }
+      out.push(`<li>${inl(trim.replaceAll(/^\d+\. /g, ''))}</li>`);
+      return;
+    }
+    closeList();
+    if (/^[-_*]{3,}$/.test(trim)) { out.push('<hr>'); return; }
+    if (trim !== '') out.push(`<p>${inl(trim)}</p>`);
+  }
+
+  // Inline formatting (operates on already HTML-escaped text)
+  function inl(s) {
+    s = s.replaceAll(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replaceAll(/__(.+?)__/g,     '<strong>$1</strong>');
+    s = s.replaceAll(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+    s = s.replaceAll(/_([^_\n]+?)_/g,   '<em>$1</em>');
+    s = s.replaceAll(/`([^`\n]+?)`/g,   '<code>$1</code>');
+    return s;
   }
 
   function esc(s) {
     return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
   }
 </script>
 </body>

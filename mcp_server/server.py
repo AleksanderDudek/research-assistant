@@ -212,7 +212,7 @@ async def main() -> None:
                             "result": {
                                 "content": [
                                     {"type": "text", "text": json.dumps(result, ensure_ascii=False)}
-                                ]  # noqa: E501
+                                ]
                             }
                         }
                     )

@@ -36,5 +36,6 @@ services:
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
       OTEL_SERVICE_NAME: agentic-research-assistant
+    command: ["sleep", "infinity"]
     depends_on:
       - mcp-server

@@ -649,7 +649,7 @@
     btnEl.disabled       = on;
     qEl.disabled         = on;
     btnLabel.textContent = on ? 'Researching\u2026' : 'Research';
-    if (!on) outputEl.innerHTML = '';
+    if (on) outputEl.innerHTML = '';
   }
 
   function showError(msg) {

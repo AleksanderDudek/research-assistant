@@ -183,6 +183,47 @@ async def main() -> None:
         log.info("mcp_server.start", transport="stdio")
         async with stdio_server() as (read_stream, write_stream):
             await server.run(read_stream, write_stream, server.create_initialization_options())
+    elif transport == "http":
+        import json
+
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.requests import Request
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+
+        port = int(os.environ.get("MCP_PORT", "8001"))
+        log.info("mcp_server.start", transport="http", port=port)
+
+        async def handle_jsonrpc(request: Request) -> JSONResponse:
+            payload = await request.json()
+            method = payload.get("method")
+            params = payload.get("params", {})
+
+            if method == "tools/list":
+                return JSONResponse({"result": {"tools": [t.model_dump() for t in TOOLS]}})
+            elif method == "tools/call":
+                name = params.get("name", "")
+                arguments = params.get("arguments", {})
+                try:
+                    result = await _dispatch(name, arguments)
+                    return JSONResponse(
+                        {
+                            "result": {
+                                "content": [
+                                    {"type": "text", "text": json.dumps(result, ensure_ascii=False)}
+                                ]  # noqa: E501
+                            }
+                        }
+                    )
+                except Exception as exc:
+                    return JSONResponse({"error": {"message": str(exc)}})
+            else:
+                return JSONResponse({"error": {"message": f"Unknown method: {method}"}})
+
+        app = Starlette(routes=[Route("/", handle_jsonrpc, methods=["POST"])])
+        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")  # noqa: S104
+        await uvicorn.Server(config).serve()
     else:
         raise ValueError(f"Unsupported MCP_TRANSPORT: {transport}")
 

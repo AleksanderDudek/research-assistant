@@ -15,6 +15,7 @@ services:
       SANDBOX_IMAGE: python:3.11-slim
       SANDBOX_TIMEOUT_SECONDS: "10"
       SANDBOX_MEMORY_LIMIT: 128m
+      MCP_TRANSPORT: http
       LOG_LEVEL: INFO
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

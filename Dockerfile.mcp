@@ -1,7 +1,7 @@
 # ── Stage 1: build ────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS builder
 
-WORKDIR /build
+WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock* ./
@@ -21,7 +21,7 @@ RUN usermod -aG docker mcp 2>/dev/null || true
 
 WORKDIR /app
 
-COPY --from=builder /build/.venv /app/.venv
+COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 COPY mcp_server/ ./mcp_server/

@@ -43,7 +43,7 @@ services:
       SANDBOX_IMAGE: python:3.11-slim
       SANDBOX_TIMEOUT_SECONDS: "10"
       SANDBOX_MEMORY_LIMIT: 128m
-      MCP_TRANSPORT: stdio
+      MCP_TRANSPORT: http
       LOG_LEVEL: INFO
     volumes:
       # Mount Docker socket so the MCP server can spin sandbox containers

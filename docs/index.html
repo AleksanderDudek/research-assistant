@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Assistant</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f7f8fa;
+    color: #1a1a2e;
+    min-height: 100vh;
+  }
+  .container { max-width: 780px; margin: 48px auto; padding: 0 20px 60px; }
+  h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.5px; }
+  .sub  { color: #666; margin: 6px 0 28px; font-size: 0.95rem; }
+  .notice {
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 8px;
+    padding: 11px 16px;
+    margin-bottom: 22px;
+    font-size: 0.88rem;
+    color: #5c4a00;
+  }
+  .notice strong { color: #3a2e00; }
+  .cfg-banner {
+    background: #fff0f0;
+    border: 1px solid #fc8181;
+    border-radius: 8px;
+    padding: 11px 16px;
+    margin-bottom: 22px;
+    font-size: 0.88rem;
+    color: #c53030;
+    display: none;
+  }
+  textarea {
+    width: 100%;
+    min-height: 96px;
+    padding: 12px 14px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: inherit;
+    resize: vertical;
+    outline: none;
+    transition: border-color .15s;
+  }
+  textarea:focus { border-color: #0070f3; }
+  .row { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+  button {
+    padding: 10px 26px;
+    background: #0070f3;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+    white-space: nowrap;
+  }
+  button:hover:not(:disabled) { background: #005ad4; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  #hint { font-size: 0.82rem; color: #888; }
+  #output { margin-top: 30px; }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #555;
+    font-size: 0.95rem;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid #ccc;
+    border-top-color: #0070f3;
+    border-radius: 50%;
+    animation: spin .75s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .answer {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 22px 24px;
+    white-space: pre-wrap;
+    line-height: 1.7;
+    font-size: 0.97rem;
+  }
+  .error {
+    background: #fff5f5;
+    border-color: #fc8181;
+    color: #c53030;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Research Assistant</h1>
+  <p class="sub">Powered by Claude &amp; MCP research tools</p>
+
+  <div class="notice">
+    &#9432;&nbsp; <strong>Free tier:</strong> 1 research request per day per IP address.
+    Results may take 1&ndash;3 minutes.
+  </div>
+
+  <div class="cfg-banner" id="cfg-banner">
+    &#9888;&nbsp; <strong>Not configured:</strong>
+    Set <code>BACKEND_URL</code> in <code>docs/index.html</code> to your server address.
+  </div>
+
+  <form id="form">
+    <textarea
+      id="question"
+      placeholder="Ask a research question, e.g. &#8220;Latest advances in fusion energy?&#8221;"
+      required
+    ></textarea>
+    <div class="row">
+      <button type="submit" id="btn">Research</button>
+      <span id="hint"></span>
+    </div>
+  </form>
+
+  <div id="output"></div>
+</div>
+
+<script>
+  // ── Configuration ──────────────────────────────────────────────────────────
+  // Set this to the HTTPS address of your server, e.g.:
+  //   const BACKEND_URL = 'https://research.example.com';
+  // Leave empty only when this page is served directly from the same server.
+  const BACKEND_URL = '';
+
+  // ── Setup ──────────────────────────────────────────────────────────────────
+  const form = document.getElementById('form');
+  const btn  = document.getElementById('btn');
+  const hint = document.getElementById('hint');
+  const out  = document.getElementById('output');
+
+  // Show warning banner if page is on GitHub Pages but BACKEND_URL is not set
+  const isGitHubPages = window.location.hostname.endsWith('github.io');
+  if (isGitHubPages && !BACKEND_URL) {
+    document.getElementById('cfg-banner').style.display = 'block';
+    btn.disabled = true;
+    hint.textContent = 'Configure BACKEND_URL to enable.';
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const question = document.getElementById('question').value.trim();
+    if (!question) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Researching\u2026';
+    hint.textContent = '';
+    out.innerHTML = '<div class="status">'
+      + '<div class="spinner"></div>'
+      + '<span id="stxt">Starting\u2026</span></div>';
+
+    try {
+      const resp = await fetch(BACKEND_URL + '/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+
+      if (!resp.body) {
+        showError('Browser does not support streaming responses.');
+        return;
+      }
+
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let   buffer  = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) handleEvent(line.slice(6));
+        }
+      }
+    } catch (err) {
+      showError('Network error: ' + String(err));
+    } finally {
+      btn.disabled   = false;
+      btn.textContent = 'Research';
+    }
+  });
+
+  function handleEvent(raw) {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    if (msg.type === 'status') {
+      const el = document.getElementById('stxt');
+      if (el) el.textContent = msg.text;
+    } else if (msg.type === 'done') {
+      out.innerHTML = '<div class="answer">' + esc(msg.answer) + '</div>';
+    } else if (msg.type === 'error') {
+      showError(msg.message);
+    }
+  }
+
+  function showError(msg) {
+    out.innerHTML = '<div class="answer error">' + esc(msg) + '</div>';
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+</script>
+</body>
+</html>

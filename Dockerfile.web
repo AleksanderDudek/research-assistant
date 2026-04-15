@@ -1,0 +1,30 @@
+# ── Stage 1: build ────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+RUN groupadd --gid 1003 web && useradd --uid 1003 --gid web --no-create-home web
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+COPY web/ ./web/
+COPY agent/ ./agent/
+COPY db/ ./db/
+
+RUN mkdir -p /data && chown web:web /data
+
+USER web
+
+EXPOSE 8080
+
+CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8080"]

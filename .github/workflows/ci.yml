@@ -160,6 +160,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.web
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ── Build, push to GHCR, and deploy (main branch only) ───────────────────
   deploy:
     name: Build, Push & Deploy
@@ -202,6 +211,16 @@ jobs:
           file: Dockerfile.mcp
           push: true
           tags: ${{ env.IMAGE_PREFIX }}/mcp-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.web
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/web:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

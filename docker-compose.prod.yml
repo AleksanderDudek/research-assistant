@@ -40,3 +40,28 @@ services:
     command: ["sleep", "infinity"]
     depends_on:
       - mcp-server
+
+  # ── Web UI ───────────────────────────────────────────────────────────────
+  web:
+    image: ghcr.io/${GITHUB_REPOSITORY}/web:latest
+    restart: unless-stopped
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL}
+      MCP_SERVER_URL: http://mcp-server:8001
+      DEFAULT_BUDGET_USD: "2.00"
+      LOG_LEVEL: INFO
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      OTEL_SERVICE_NAME: agentic-research-assistant
+      RATE_LIMIT_FILE: /data/rate_limits.json
+    volumes:
+      - web_data:/data
+    ports:
+      - "0.0.0.0:80:8080"
+    depends_on:
+      - mcp-server
+
+volumes:
+  web_data:

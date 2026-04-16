@@ -28,8 +28,28 @@ def _extract_json(text: str) -> str:
     return text.strip()
 
 
+def _sanitize_json_strings(text: str) -> str:
+    """Escape bare control characters inside JSON string tokens.
+
+    LLMs sometimes emit literal newlines/tabs inside JSON strings, which
+    makes the output technically invalid JSON.  This function replaces them
+    with their proper JSON escape sequences before parsing.
+    """
+
+    def _fix(m: re.Match[str]) -> str:
+        s = m.group(0)
+        return s.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+    return re.sub(r'"(?:[^"\\]|\\.)*"', _fix, text, flags=re.DOTALL)
+
+
 def _parse_reflection(raw: str) -> ReflectionOutput:
-    data = json.loads(_extract_json(raw))
+    extracted = _extract_json(raw)
+    try:
+        data = json.loads(extracted)
+    except json.JSONDecodeError:
+        # Retry after sanitising literal control chars inside string values
+        data = json.loads(_sanitize_json_strings(extracted))
     additional = [PlanStep(**s) for s in data.get("additional_steps", [])]
     return ReflectionOutput(
         sufficient=bool(data["sufficient"]),
@@ -107,7 +127,7 @@ class Reflector:
                 n_additional=len(reflection.additional_steps),
             )
             return reflection
-        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+        except (KeyError, ValueError) as exc:
             log.warning("reflector.parse_error", error=str(exc))
             # Assume sufficient and return raw content as final answer
             return ReflectionOutput(

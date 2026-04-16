@@ -666,7 +666,12 @@
       updateProgressStatus(String(msg.text));
     } else if (msg.type === 'done') {
       finishProgress('done');
-      showAnswer(parseAgentResponse(msg.answer));
+      const parsed = parseAgentResponse(msg.answer);
+      // Server-provided fields (reasoning, sufficient) take priority over anything
+      // extracted from the answer text, so apply them as overrides when present.
+      if (msg.reasoning) parsed.reasoning = String(msg.reasoning);
+      if (msg.sufficient === false) parsed.sufficient = false;
+      showAnswer(parsed);
     } else if (msg.type === 'error') {
       finishProgress('error');
       showError(String(msg.message));
@@ -675,23 +680,31 @@
 
   // ── Agent response parser ─────────────────────────────────────────────────
   // Handles all known shapes coming from the agent:
-  //   1. Plain markdown string  (ideal path)
+  //   1. Plain markdown string  (ideal path — server already extracted final_answer)
   //   2. ReflectionOutput JSON  { sufficient, reasoning, additional_steps, final_answer }
-  //   3. Raw LLM text           (reflector JSON parse failed; may contain the JSON as text)
-  //   4. Already-parsed object  (msg.answer is an object, not a string)
+  //      LLMs sometimes embed literal newlines inside JSON strings (invalid JSON).
+  //      _tryParseJSON sanitises those before retrying.
+  //   3. Already-parsed object  (msg.answer is a JS object, not a string)
+  function _tryParseJSON(text) {
+    try { return JSON.parse(text); } catch { /* try sanitised */ }
+    // Escape bare newlines/carriage-returns/tabs inside JSON string tokens
+    try {
+      const sanitized = text.replaceAll(/"(?:[^"\\]|\\.)*"/gs, m =>
+        m.replaceAll('\n', String.raw`\n`).replaceAll('\r', String.raw`\r`).replaceAll('\t', String.raw`\t`)
+      );
+      return JSON.parse(sanitized);
+    } catch { return null; }
+  }
+
   function parseAgentResponse(raw) {
-    // If already a JS object (server sent nested JSON)
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
       return _buildParsed(raw);
     }
     const text = String(raw || '');
-    // Try JSON parse
-    try {
-      const obj = JSON.parse(text);
-      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-        return _buildParsed(obj);
-      }
-    } catch { /* plain string */ }
+    const obj = _tryParseJSON(text);
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      return _buildParsed(obj);
+    }
     return { finalAnswer: text, reasoning: '', sufficient: true, additionalSteps: [] };
   }
 

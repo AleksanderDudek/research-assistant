@@ -130,6 +130,7 @@ class Agent:
                     if reflection.sufficient:
                         log.info("agent.sufficient", run_id=str(run_id))
                         final_answer = reflection.final_answer
+                        run_record.reasoning = reflection.reasoning
                         status = RunStatus.COMPLETED
                         break
 

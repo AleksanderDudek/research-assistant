@@ -328,7 +328,12 @@ async def _agent_task(
 
     try:
         record = await Agent().run(question=question, budget=Budget(limit_usd=2.00))
-        await queue.put({"type": "done", "answer": record.final_answer or "(no answer)"})
+        await queue.put({
+            "type": "done",
+            "answer": record.final_answer or "(no answer)",
+            "reasoning": record.reasoning,
+            "sufficient": record.status.value == "completed",
+        })
     except asyncio.CancelledError:
         raise  # task cancelled by the stream finaliser — propagate correctly
     except Exception as exc:

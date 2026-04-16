@@ -122,4 +122,5 @@ class RunRecord(BaseModel):
     ended_at: datetime | None = None
     total_cost_usd: float = 0.0
     final_answer: str = ""
+    reasoning: str = ""
     replan_count: int = 0

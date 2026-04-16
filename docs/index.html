@@ -200,7 +200,7 @@
       display: flex; align-items: center; gap: 7px;
       font-weight: 700; color: var(--green); font-size: .9rem;
     }
-    .answer-toolbar-meta { color: var(--gray-400); display: flex; align-items: center; gap: 8px; }
+    .answer-toolbar-meta { color: var(--gray-400); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .answer-body {
       padding: 28px 30px; line-height: 1.8;
       font-size: .97rem; color: var(--gray-900);
@@ -327,6 +327,15 @@
     /* ── Disclaimer ── */
     .disclaimer { margin-top: 16px; font-size: .78rem; color: var(--gray-400); text-align: center; }
 
+    /* ── Print / PDF export ── */
+    @media print {
+      header, footer, .card, .banner, .progress-card, .disclaimer,
+      .answer-toolbar, .research-notes, #cfg-banner { display: none !important; }
+      body { background: #fff; }
+      .answer-card { box-shadow: none; border: none; border-radius: 0; }
+      .answer-body { padding: 0; font-size: 1rem; line-height: 1.75; }
+    }
+
     /* ── Copy feedback ── */
     .copied { color: var(--green) !important; border-color: var(--green-br) !important; }
 
@@ -388,14 +397,17 @@
       <span class="char-count" id="char-count">0&thinsp;/&thinsp;2000</span>
     </div>
 
-    <div class="usage-row" id="usage-row" hidden>
+    <div class="usage-row" id="usage-row">
       <div class="quota-dots" id="quota-dots">
         <div class="qdot" id="qdot-0"></div>
         <div class="qdot" id="qdot-1"></div>
         <div class="qdot" id="qdot-2"></div>
       </div>
       <span id="usage-label"></span>
-      <span id="usage-cooldown"></span>
+      <span id="usage-sep-last" hidden style="color:var(--gray-300)">&middot;</span>
+      <span id="usage-last"></span>
+      <span style="color:var(--gray-300)">&middot;</span>
+      <span id="usage-browser"></span>
     </div>
   </div>
 
@@ -437,8 +449,7 @@
   // ── Constants ─────────────────────────────────────────────────────────────
   const MAX_CHARS      = 2000;
   const MAX_WAIT_MS    = 8 * 60 * 1000;
-  const DAILY_LIMIT    = 999;
-  const COOLDOWN_MS    = 0;
+  const DAILY_LIMIT    = 3;
   const STORAGE_KEY    = 'ra_usage_v1';
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
@@ -482,69 +493,77 @@
     saveUsage(u);
   }
 
-  // Returns { allowed, message }
+  // Returns { allowed, message, retryable }
   function clientRateCheck() {
-    const u   = getUsage();
-    const now = Date.now();
-    const last = u.timestamps[u.timestamps.length - 1] || 0;
-    const wait = last ? COOLDOWN_MS - (now - last) : 0;
-
-    if (wait > 0) {
-      const mins = Math.floor(wait / 60000);
-      const secs = Math.floor((wait % 60000) / 1000);
-      const rem  = DAILY_LIMIT - u.count;
-      return { allowed: false, message: `Please wait ${mins}m ${secs}s (${rem} left today).` };
-    }
+    const u = getUsage();
     if (u.count >= DAILY_LIMIT) {
-      return { allowed: false, message: `Daily limit reached (${DAILY_LIMIT}/day). Resets at midnight.` };
+      return {
+        allowed: false,
+        message: `You've used all ${DAILY_LIMIT} research requests for today. Your limit resets at midnight.`,
+        retryable: false,
+      };
     }
-    return { allowed: true, message: '' };
+    return { allowed: true, message: '', retryable: true };
   }
 
   // ── Usage UI ──────────────────────────────────────────────────────────────
-  let cooldownTimer = null;
-
-  function _updateDots(used, wait) {
-    for (let i = 0; i < DAILY_LIMIT; i++) {
-      const dot = document.getElementById(`qdot-${i}`);
-      if (!dot) continue;
-      dot.classList.toggle('used', i < used);
-      dot.classList.toggle('current', i === used - 1 && wait > 0);
-    }
+  function _getBrowserName() {
+    const ua = navigator.userAgent;
+    if (/Edg\//.test(ua))         return 'Edge';
+    if (/OPR\/|Opera/.test(ua))   return 'Opera';
+    if (/Chrome\//.test(ua))      return 'Chrome';
+    if (/Firefox\//.test(ua))     return 'Firefox';
+    if (/Safari\//.test(ua))      return 'Safari';
+    return 'This browser';
   }
 
-  function _updateCooldown(wait) {
-    const cooldownEl = document.getElementById('usage-cooldown');
-    if (!cooldownEl) return;
-    if (wait > 0) {
-      const mins = Math.floor(wait / 60000);
-      const secs = Math.floor((wait % 60000) / 1000);
-      cooldownEl.textContent = `\u00b7 next in ${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
-      if (!cooldownTimer) cooldownTimer = setInterval(updateUsageUI, 1000);
-    } else {
-      cooldownEl.textContent = '';
-      if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+  function _fmtRelativeTime(ts) {
+    const diff = Date.now() - ts;
+    if (diff < 60_000)   return 'just now';
+    if (diff < 3_600_000) {
+      const m = Math.floor(diff / 60_000);
+      return `${m}m ago`;
     }
+    const h = Math.floor(diff / 3_600_000);
+    if (h < 24) return `${h}h ago`;
+    return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
   function updateUsageUI() {
-    const u   = getUsage();
-    const now = Date.now();
-    const last = u.timestamps[u.timestamps.length - 1] || 0;
+    const u    = getUsage();
     const used = u.count;
-    const remaining = Math.max(0, DAILY_LIMIT - used);
-    const wait = last ? Math.max(0, COOLDOWN_MS - (now - last)) : 0;
 
-    _updateDots(used, wait);
-
-    const labelEl = document.getElementById('usage-label');
-    if (labelEl) {
-      labelEl.textContent = remaining === 0
-        ? 'No requests remaining today'
-        : `${remaining} of ${DAILY_LIMIT} requests remaining today`;
+    // Dots
+    for (let i = 0; i < DAILY_LIMIT; i++) {
+      const dot = document.getElementById(`qdot-${i}`);
+      if (dot) dot.classList.toggle('used', i < used);
     }
 
-    _updateCooldown(wait);
+    // "X/3 used" label
+    const labelEl = document.getElementById('usage-label');
+    if (labelEl) {
+      labelEl.textContent = used >= DAILY_LIMIT
+        ? `Limit reached (${DAILY_LIMIT}/${DAILY_LIMIT} today)`
+        : `${used}/${DAILY_LIMIT} used today`;
+    }
+
+    // Last request time
+    const lastTs  = u.timestamps[u.timestamps.length - 1] || 0;
+    const lastEl  = document.getElementById('usage-last');
+    const sepEl   = document.getElementById('usage-sep-last');
+    if (lastEl && sepEl) {
+      if (lastTs) {
+        lastEl.textContent = `Last: ${_fmtRelativeTime(lastTs)}`;
+        sepEl.hidden = false;
+      } else {
+        lastEl.textContent = '';
+        sepEl.hidden = true;
+      }
+    }
+
+    // Browser identifier
+    const browserEl = document.getElementById('usage-browser');
+    if (browserEl) browserEl.textContent = _getBrowserName();
   }
 
   updateUsageUI();
@@ -623,7 +642,7 @@
     if (!question || btnEl.disabled) return;
 
     const check = clientRateCheck();
-    if (!check.allowed) { showError(check.message); return; }
+    if (!check.allowed) { showError(check.message, check.retryable); return; }
 
     setLoading(true);
     startProgress();
@@ -785,7 +804,7 @@
 
   function retryResearch() {
     outputEl.innerHTML = '';
-    form.requestSubmit();
+    submitQuestion();
   }
 
   function showAnswer(parsed) {
@@ -866,6 +885,88 @@
         setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('copied'); }, 2000);
       });
     }
+  }
+
+  // ── Download helpers ──────────────────────────────────────────────────────
+  function _exportStyles() {
+    return `
+      body{font-family:system-ui,sans-serif;max-width:780px;margin:40px auto;padding:0 24px 60px;color:#0f172a;line-height:1.75}
+      h1{font-size:1rem;color:#64748b;font-weight:normal;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:28px}
+      h2{font-size:1.2rem;font-weight:800;margin:28px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9}
+      h2:first-child{margin-top:0}
+      h3{font-size:1.05rem;font-weight:700;margin:20px 0 7px}
+      h4{font-size:.82rem;font-weight:700;margin:16px 0 5px;text-transform:uppercase;letter-spacing:.04em}
+      p{margin-bottom:14px}p:last-child{margin-bottom:0}
+      ul,ol{padding-left:22px;margin:6px 0 14px}li{margin-bottom:5px}
+      strong{font-weight:700}em{font-style:italic;color:#334155}
+      code{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;font-family:monospace;font-size:.85em}
+      pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px 20px;overflow-x:auto;margin:14px 0;font-size:.88em;line-height:1.6}
+      pre code{background:none;border:none;padding:0;color:inherit}
+      a{color:#2563eb}blockquote{border-left:3px solid #2563eb;padding:4px 0 4px 16px;margin:12px 0;color:#64748b;font-style:italic}
+      hr{border:none;border-top:1px solid #e2e8f0;margin:18px 0}
+      table{border-collapse:collapse;width:100%;font-size:.9rem;margin:16px 0}
+      .table-wrap{overflow-x:auto}
+      th{background:#f1f5f9;font-weight:700;color:#334155;padding:10px 14px;text-align:left;border-bottom:2px solid #e2e8f0}
+      td{padding:9px 14px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+      tr:last-child td{border-bottom:none}tr:nth-child(even){background:#f8fafc}
+      .ref-section{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-top:20px;font-size:.88rem}
+      .ref-section h2,.ref-section h3{border:none;font-size:.88rem;color:#64748b;margin:0 0 10px}
+      .halted-notice{background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:10px 14px;margin-bottom:20px;color:#b45309;font-size:.88rem}
+      footer{margin-top:40px;padding-top:14px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:.8rem}
+    `.trim();
+  }
+
+  function _exportDoc(bodyHtml, question, forPrint) {
+    const q  = esc(question.slice(0, 120));
+    const ts = new Date().toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
+    // '<' + '/script>' splits the closing tag so the HTML parser doesn't
+    // interpret it as closing docs/index.html's own <script> block.
+    const endScript = '<' + '/script>';
+    const printBlock = forPrint
+      ? `\n<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};${endScript}`
+      : '';
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${q}</title>
+<style>${_exportStyles()}</style>
+</head>
+<body>
+<h1>Research question: ${q}</h1>
+${bodyHtml}
+<footer>Generated by Research Assistant &middot; ${ts}</footer>${printBlock}
+</body>
+</html>`;
+  }
+
+  function downloadHTML() {
+    const body = document.getElementById('answer-body');
+    if (!body) return;
+    const question = qEl.value.trim();
+    const slug = question.slice(0, 40).toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replace(/-+$/, '') || String(Date.now());
+    const blob = new Blob([_exportDoc(body.innerHTML, question, false)], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: `research-${slug}.html` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadPDF() {
+    const body = document.getElementById('answer-body');
+    if (!body) return;
+    const question = qEl.value.trim();
+    const w = globalThis.open('', '_blank');
+    if (!w) {
+      // Popup blocked — fall back to printing the page directly
+      globalThis.print();
+      return;
+    }
+    w.document.write(_exportDoc(body.innerHTML, question, true));
+    w.document.close();
   }
 
   // ── Markdown renderer ─────────────────────────────────────────────────────

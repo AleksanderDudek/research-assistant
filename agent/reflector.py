@@ -25,7 +25,18 @@ def _extract_json(text: str) -> str:
     text = text.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE)
-    return text.strip()
+    text = text.strip()
+    # Locate the outermost JSON object in case there is surrounding prose
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+    return text
+
+
+def _remove_trailing_commas(text: str) -> str:
+    """Remove trailing commas before } or ] — a frequent LLM JSON mistake."""
+    return re.sub(r",\s*([}\]])", r"\1", text)
 
 
 def _sanitize_json_strings(text: str) -> str:
@@ -45,11 +56,21 @@ def _sanitize_json_strings(text: str) -> str:
 
 def _parse_reflection(raw: str) -> ReflectionOutput:
     extracted = _extract_json(raw)
-    try:
-        data = json.loads(extracted)
-    except json.JSONDecodeError:
-        # Retry after sanitising literal control chars inside string values
-        data = json.loads(_sanitize_json_strings(extracted))
+    sanitized = _sanitize_json_strings(extracted)
+    attempts = [
+        extracted,
+        sanitized,
+        _remove_trailing_commas(sanitized),
+    ]
+    data: dict | None = None
+    for attempt in attempts:
+        try:
+            data = json.loads(attempt)
+            break
+        except json.JSONDecodeError:
+            continue
+    if data is None:
+        raise ValueError(f"Unparseable JSON from reflector: {extracted[:300]}")
     additional = [PlanStep(**s) for s in data.get("additional_steps", [])]
     return ReflectionOutput(
         sufficient=bool(data["sufficient"]),

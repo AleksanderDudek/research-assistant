@@ -12,6 +12,21 @@ from agent.config import settings
 from agent.models import LLMResponse
 from agent.telemetry import get_tracer
 
+
+class LLMClientError(Exception):
+    """Raised when the Anthropic API returns a recognised error.
+
+    Attributes:
+        retryable: True when a retry is likely to succeed (rate limits,
+                   transient connectivity); False for permanent errors
+                   such as invalid API keys.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
 log = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -84,7 +99,33 @@ class LLMClient:
 
             log.info("llm.call", model=model, n_messages=len(messages))
 
-            response = await self._client.messages.create(**kwargs)
+            try:
+                response = await self._client.messages.create(**kwargs)
+            except anthropic.RateLimitError as exc:
+                raise LLMClientError(
+                    "The AI service is temporarily rate-limited. Please wait a minute and try again.",  # noqa: E501
+                    retryable=True,
+                ) from exc
+            except anthropic.AuthenticationError as exc:
+                raise LLMClientError(
+                    "Invalid API key — please check the server configuration.",
+                    retryable=False,
+                ) from exc
+            except anthropic.APIConnectionError as exc:
+                raise LLMClientError(
+                    "Could not connect to the AI service. Please try again.",
+                    retryable=True,
+                ) from exc
+            except anthropic.InternalServerError as exc:
+                raise LLMClientError(
+                    "The AI service is experiencing issues. Please try again in a moment.",
+                    retryable=True,
+                ) from exc
+            except anthropic.APIStatusError as exc:
+                raise LLMClientError(
+                    f"AI service returned an error (HTTP {exc.status_code}).",
+                    retryable=exc.status_code >= 500,
+                ) from exc
 
             input_tokens: int = response.usage.input_tokens
             output_tokens: int = response.usage.output_tokens

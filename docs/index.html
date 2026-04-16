@@ -287,12 +287,42 @@
     .answer-body tr:last-child td { border-bottom: none; }
     .answer-body tr:nth-child(even) { background: var(--gray-50); }
 
+    /* ── Partial answer card (halted runs) ── */
+    .answer-card.partial .answer-toolbar {
+      background: var(--amber-bg); border-bottom-color: var(--amber-br);
+    }
+    .answer-card.partial .answer-toolbar-label { color: var(--amber); }
+    .halted-notice {
+      background: var(--amber-bg); border: 1px solid var(--amber-br);
+      border-radius: 7px; padding: 10px 14px; margin-bottom: 20px;
+      font-size: .88rem; color: var(--amber); line-height: 1.5;
+    }
+
     /* ── Error card ── */
     .error-card {
-      background: var(--red-bg); border: 1px solid var(--red-br);
-      border-radius: var(--radius); padding: 16px 20px; color: var(--red);
-      font-size: .93rem; display: flex; gap: 10px; align-items: flex-start;
+      background: #fff; border: 1px solid var(--red-br);
+      border-radius: var(--radius); box-shadow: var(--shadow-md); overflow: hidden;
     }
+    .error-card-header {
+      display: flex; align-items: center; gap: 8px; padding: 12px 20px;
+      background: var(--red-bg); border-bottom: 1px solid var(--red-br);
+      font-weight: 700; color: var(--red); font-size: .9rem;
+    }
+    .error-card-body {
+      padding: 16px 20px; color: var(--gray-700); font-size: .93rem; line-height: 1.6;
+    }
+    .error-card-footer {
+      padding: 10px 20px; border-top: 1px solid var(--red-br);
+      display: flex; align-items: center; gap: 10px; background: var(--red-bg);
+      flex-wrap: wrap;
+    }
+    .btn-retry {
+      background: var(--red); color: #fff; border: none; border-radius: 7px;
+      padding: 7px 16px; font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-retry:hover { background: #b91c1c; }
+    .error-footer-hint { font-size: .82rem; color: var(--gray-500); }
 
     /* ── Disclaimer ── */
     .disclaimer { margin-top: 16px; font-size: .78rem; color: var(--gray-400); text-align: center; }
@@ -623,7 +653,7 @@
         }
       } else {
         finishProgress('error');
-        showError('Your browser does not support streaming responses.');
+        showError('Your browser does not support streaming responses.', false);
       }
     } catch (err) {
       clearTimeout(timeoutId);
@@ -665,16 +695,21 @@
     if (msg.type === 'status') {
       updateProgressStatus(String(msg.text));
     } else if (msg.type === 'done') {
-      finishProgress('done');
-      const parsed = parseAgentResponse(msg.answer);
-      // Server-provided fields (reasoning, sufficient) take priority over anything
-      // extracted from the answer text, so apply them as overrides when present.
-      if (msg.reasoning) parsed.reasoning = String(msg.reasoning);
-      if (msg.sufficient === false) parsed.sufficient = false;
-      showAnswer(parsed);
+      const runStatus = String(msg.run_status || 'completed');
+      finishProgress(runStatus === 'failed' ? 'error' : 'done');
+      if (runStatus === 'failed') {
+        showError(msg.answer || 'Research failed. Please try again.');
+      } else {
+        const parsed = parseAgentResponse(msg.answer);
+        // Server-provided fields take priority over anything extracted from the answer text.
+        if (msg.reasoning) parsed.reasoning = String(msg.reasoning);
+        if (msg.sufficient === false) parsed.sufficient = false;
+        parsed.runStatus = runStatus;
+        showAnswer(parsed);
+      }
     } else if (msg.type === 'error') {
       finishProgress('error');
-      showError(String(msg.message));
+      showError(String(msg.message), msg.retryable !== false);
     }
   }
 
@@ -726,20 +761,65 @@
     if (on) outputEl.innerHTML = '';
   }
 
-  function showError(msg) {
+  function showError(msg, retryable = true) {
+    const footerHtml = retryable ? `
+      <div class="error-card-footer">
+        <button class="btn-retry" onclick="retryResearch()">Try again</button>
+        <span class="error-footer-hint">Your question is still in the text box above.</span>
+      </div>` : '';
     outputEl.innerHTML = `
       <div class="error-card">
-        <span style="flex-shrink:0;font-size:1.1rem">&#9888;</span>
-        <div>
-          <strong>Error</strong><br>
-          <span>${esc(msg)}</span>
+        <div class="error-card-header">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58
+              9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z"
+              clip-rule="evenodd"/>
+            <path d="M11 13a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1-4a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V10a1 1 0 0 1 1-1z"/>
+          </svg>
+          Research failed
         </div>
+        <div class="error-card-body">${esc(msg)}</div>
+        ${footerHtml}
       </div>`;
   }
 
+  function retryResearch() {
+    outputEl.innerHTML = '';
+    form.requestSubmit();
+  }
+
   function showAnswer(parsed) {
-    const { finalAnswer, reasoning, sufficient, additionalSteps } = parsed;
-    const ts  = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const { finalAnswer, reasoning, additionalSteps } = parsed;
+    const runStatus = parsed.runStatus || 'completed';
+    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isPartial = runStatus === 'halted_over_budget' || runStatus === 'halted_replan_limit';
+
+    // Toolbar icon + label
+    const toolbarIcon = isPartial
+      ? `<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+           <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58
+             9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z"
+             clip-rule="evenodd"/>
+           <path d="M11 13a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1-4a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V10a1 1 0 0 1 1-1z"/>
+         </svg>`
+      : `<svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+           <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 0 1 0 1.414L8.414
+             14l-4.121-4.121a1 1 0 1 1 1.414-1.414L8.414 11.172l7.879-7.879a1
+             1 0 0 1 1.414 0z" clip-rule="evenodd"/>
+         </svg>`;
+    const toolbarTitle = isPartial ? 'Partial Answer' : 'Answer';
+
+    // Inline notice for halted runs
+    let haltedHtml = '';
+    if (runStatus === 'halted_over_budget') {
+      haltedHtml = `<div class="halted-notice">
+        &#9888; Research was stopped at the spending limit — this answer may be incomplete.
+      </div>`;
+    } else if (runStatus === 'halted_replan_limit') {
+      haltedHtml = `<div class="halted-notice">
+        &#9888; Research reached the maximum number of investigation cycles — this answer may be incomplete.
+      </div>`;
+    }
 
     // Research-process collapsible (shown when we have reasoning from the agent)
     const notesHtml = reasoning ? `
@@ -759,23 +839,18 @@
       </details>` : '';
 
     outputEl.innerHTML = `
-      <div class="answer-card">
+      <div class="answer-card${isPartial ? ' partial' : ''}">
         <div class="answer-toolbar">
           <span class="answer-toolbar-label">
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 0 1 0 1.414L8.414
-                14l-4.121-4.121a1 1 0 1 1 1.414-1.414L8.414 11.172l7.879-7.879a1
-                1 0 0 1 1.414 0z" clip-rule="evenodd"/>
-            </svg>
-            Answer
+            ${toolbarIcon}
+            ${toolbarTitle}
           </span>
           <span class="answer-toolbar-meta">
-            ${sufficient ? '' : '<span style="color:var(--amber);font-weight:600;font-size:.78rem">Partial</span>'}
             <span>${ts}</span>
             <button class="btn btn-ghost" id="copy-btn" onclick="copyAnswer()">Copy</button>
           </span>
         </div>
-        <div class="answer-body" id="answer-body">${renderMarkdown(finalAnswer)}</div>
+        <div class="answer-body" id="answer-body">${haltedHtml}${renderMarkdown(finalAnswer)}</div>
         ${notesHtml}${stepsHtml}
       </div>`;
   }

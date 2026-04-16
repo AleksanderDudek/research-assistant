@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.budget import Budget, BudgetExceeded
 from agent.config import settings
 from agent.executor import Executor
-from agent.llm_client import LLMClient
+from agent.llm_client import LLMClient, LLMClientError
 from agent.mcp_client import MCPClient
 from agent.models import Plan, RunRecord, RunStatus, StepKind, StepResult
 from agent.planner import Planner
@@ -156,14 +156,24 @@ class Agent:
                         rationale=f"Replan cycle {replan_count}",
                     )
 
-            except BudgetExceeded as exc:
-                log.warning("agent.budget_exceeded", error=str(exc))
-                final_answer = f"Research halted: {exc}"
+            except BudgetExceeded:
+                log.warning("agent.budget_exceeded", run_id=str(run_id))
+                final_answer = "Research was stopped early because the spending limit was reached."
                 status = RunStatus.HALTED_OVER_BUDGET
 
+            except LLMClientError as exc:
+                log.warning(
+                    "agent.llm_error",
+                    run_id=str(run_id),
+                    error=str(exc),
+                    retryable=exc.retryable,
+                )
+                final_answer = str(exc)
+                status = RunStatus.FAILED
+
             except Exception as exc:
-                log.exception("agent.fatal_error", error=str(exc))
-                final_answer = f"Research failed with unexpected error: {exc}"
+                log.exception("agent.fatal_error", run_id=str(run_id), error=str(exc))
+                final_answer = "Research encountered an unexpected error. Please try again."
                 status = RunStatus.FAILED
 
             total_cost = budget.spent()

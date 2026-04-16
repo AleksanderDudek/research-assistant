@@ -318,6 +318,25 @@ def _sse(payload: dict[str, object]) -> str:
     return _SSE + json.dumps(payload) + "\n\n"
 
 
+# Thresholds (in 5-second ticks) and the status text to show at each phase.
+_PHASE_MESSAGES: list[tuple[int, str]] = [
+    (0, "Starting research\u2026"),
+    (1, "Planning research strategy\u2026"),
+    (2, "Gathering information\u2026"),
+    (6, "Analysing evidence\u2026"),
+    (12, "Synthesising findings\u2026"),
+    (20, "Preparing answer\u2026"),
+]
+
+
+def _phase_message(tick: int) -> str:
+    msg = _PHASE_MESSAGES[0][1]
+    for threshold, text in _PHASE_MESSAGES:
+        if tick >= threshold:
+            msg = text
+    return msg
+
+
 async def _agent_task(
     question: str,
     queue: asyncio.Queue[dict[str, object]],
@@ -334,6 +353,7 @@ async def _agent_task(
                 "answer": record.final_answer or "(no answer)",
                 "reasoning": record.reasoning,
                 "sufficient": record.status.value == "completed",
+                "run_status": record.status.value,
             }
         )
     except asyncio.CancelledError:
@@ -341,7 +361,11 @@ async def _agent_task(
     except Exception as exc:
         log.exception("agent.run_error", error=str(exc))
         await queue.put(
-            {"type": "error", "message": f"Research failed ({type(exc).__name__}): {exc}"}
+            {
+                "type": "error",
+                "message": "Research failed unexpectedly. Please try again.",
+                "retryable": True,
+            }
         )
 
 
@@ -352,7 +376,7 @@ async def _research_stream(
     """SSE generator for a single research request."""
     allowed, rate_msg = _check_and_record(ip)
     if not allowed:
-        yield _sse({"type": "error", "message": rate_msg})
+        yield _sse({"type": "error", "message": rate_msg, "retryable": False})
         yield _SSE_END
         return
 
@@ -370,11 +394,17 @@ async def _research_stream(
                 return
             except TimeoutError:
                 tick += 1
-                yield _sse({"type": "status", "text": f"Researching\u2026 ({tick * 5}s elapsed)"})
+                yield _sse({"type": "status", "text": _phase_message(tick)})
     except Exception as exc:
         log.exception("stream.fatal", error=str(exc))
         try:
-            yield _sse({"type": "error", "message": f"Stream error ({type(exc).__name__}): {exc}"})
+            yield _sse(
+                {
+                    "type": "error",
+                    "message": "A stream error occurred. Please try again.",
+                    "retryable": True,
+                }
+            )
             yield _SSE_END
         except Exception as write_exc:
             log.debug("stream.error_write_failed", error=str(write_exc))

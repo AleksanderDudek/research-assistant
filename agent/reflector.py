@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -62,7 +63,7 @@ def _parse_reflection(raw: str) -> ReflectionOutput:
         sanitized,
         _remove_trailing_commas(sanitized),
     ]
-    data: dict | None = None
+    data: dict[str, Any] | None = None
     for attempt in attempts:
         try:
             data = json.loads(attempt)

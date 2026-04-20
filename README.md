@@ -4,6 +4,10 @@ A production-grade AI research agent built from first principles. Given a resear
 
 **This is not a LangChain wrapper.** Every layer is hand-rolled to make the design decisions explicit and auditable.
 
+**[Live demo →](https://aleksanderdudek.github.io/research-assistant/)**
+
+![Research Assistant demo](docs/assets/demo.png)
+
 ---
 
 ## What it demonstrates
